@@ -1,0 +1,64 @@
+{
+  "name": "Consultation",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "Client name"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Email address"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "project_type": {
+      "type": "string",
+      "enum": [
+        "residential",
+        "commercial",
+        "restaurant",
+        "office",
+        "other"
+      ],
+      "description": "Type of project"
+    },
+    "location": {
+      "type": "string",
+      "description": "Project location"
+    },
+    "budget": {
+      "type": "string",
+      "description": "Budget range"
+    },
+    "message": {
+      "type": "string",
+      "description": "Additional details"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "contacted",
+        "in_progress",
+        "completed"
+      ],
+      "default": "pending",
+      "description": "Consultation status"
+    },
+    "preferred_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Preferred consultation date"
+    }
+  },
+  "required": [
+    "full_name",
+    "email",
+    "phone",
+    "project_type"
+  ]
+}

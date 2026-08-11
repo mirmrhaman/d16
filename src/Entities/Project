@@ -1,0 +1,62 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "location": {
+      "type": "string",
+      "description": "Project location"
+    },
+    "project_type": {
+      "type": "string",
+      "description": "Type of project"
+    },
+    "style": {
+      "type": "string",
+      "description": "Design style"
+    },
+    "area": {
+      "type": "string",
+      "description": "Project area in sqft"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "residential",
+        "commercial",
+        "restaurant_cafe",
+        "other"
+      ],
+      "description": "Project category"
+    },
+    "featured_image": {
+      "type": "string",
+      "description": "Main project image URL"
+    },
+    "gallery_images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional project images"
+    },
+    "description": {
+      "type": "string",
+      "description": "Project description"
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false,
+      "description": "Show on homepage"
+    }
+  },
+  "required": [
+    "title",
+    "location",
+    "category",
+    "featured_image"
+  ]
+}

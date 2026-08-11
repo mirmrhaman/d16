@@ -1,0 +1,33 @@
+{
+  "name": "ContactInfo",
+  "type": "object",
+  "properties": {
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email address"
+    },
+    "address": {
+      "type": "string",
+      "description": "Office address"
+    },
+    "working_hours": {
+      "type": "string",
+      "description": "Working hours"
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Office locations"
+    }
+  },
+  "required": [
+    "phone",
+    "email"
+  ]
+}

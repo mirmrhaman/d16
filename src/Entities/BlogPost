@@ -1,0 +1,47 @@
+{
+  "name": "BlogPost",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Blog post title"
+    },
+    "excerpt": {
+      "type": "string",
+      "description": "Short description"
+    },
+    "content": {
+      "type": "string",
+      "description": "Full blog content"
+    },
+    "featured_image": {
+      "type": "string",
+      "description": "Blog post image"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "interior_design",
+        "kitchen_design",
+        "office_design",
+        "furniture",
+        "tips"
+      ],
+      "description": "Blog category"
+    },
+    "published_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Publication date"
+    },
+    "author": {
+      "type": "string",
+      "description": "Author name"
+    }
+  },
+  "required": [
+    "title",
+    "content",
+    "featured_image"
+  ]
+}

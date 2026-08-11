@@ -1,0 +1,33 @@
+# Local Netlify folder
+.netlify
+
+# Dependencies / build output
+node_modules/
+dist/
+
+# OS/editor noise
+.DS_Store
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Database local overrides
+database/.env.local
+database/.env.*.local
+server/.env
+server/.env.local
+server/.env.*.local

@@ -1,0 +1,37 @@
+{
+  "name": "Service",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Service name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Service description"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon identifier"
+    },
+    "image": {
+      "type": "string",
+      "description": "Service image URL"
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key features"
+    },
+    "order": {
+      "type": "number",
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "title",
+    "description"
+  ]
+}

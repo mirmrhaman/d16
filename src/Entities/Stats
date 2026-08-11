@@ -1,0 +1,36 @@
+{
+  "name": "Stats",
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "description": "Stat label"
+    },
+    "value": {
+      "type": "string",
+      "description": "Stat value"
+    },
+    "icon": {
+      "type": "string",
+      "enum": [
+        "Award",
+        "Users",
+        "TrendingUp",
+        "Star",
+        "Target",
+        "Briefcase"
+      ],
+      "description": "Icon name from lucide-react"
+    },
+    "order": {
+      "type": "number",
+      "description": "Display order",
+      "default": 0
+    }
+  },
+  "required": [
+    "label",
+    "value",
+    "icon"
+  ]
+}

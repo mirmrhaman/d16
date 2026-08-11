@@ -1,0 +1,33 @@
+{
+  "name": "HeroSlide",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Slide title"
+    },
+    "subtitle": {
+      "type": "string",
+      "description": "Slide subtitle"
+    },
+    "image": {
+      "type": "string",
+      "description": "Slide background image URL"
+    },
+    "order": {
+      "type": "number",
+      "description": "Display order",
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Show on homepage",
+      "default": true
+    }
+  },
+  "required": [
+    "title",
+    "subtitle",
+    "image"
+  ]
+}

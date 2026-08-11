@@ -119,11 +119,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     // Keep the browser tab/history icon in sync with the logo stored in the database.
-    if (!logoSrc) return;
-
-    const faviconHref = logoSrc.startsWith('data:')
-      ? logoSrc
-      : `${logoSrc}${logoSrc.includes('?') ? '&' : '?'}v=${brandingNonce}`;
+    const faviconHref = '/d16-favicon.svg?v=1';
 
     let link = document.querySelector("link[rel='icon']");
     if (!link) {
@@ -132,7 +128,8 @@ export default function Layout({ children }) {
       document.head.appendChild(link);
     }
     link.setAttribute("href", faviconHref);
-  }, [logoSrc, brandingNonce]);
+    document.title = 'D16';
+  }, [brandingNonce]);
 
   const navigationItems = [
     { title: "Home", url: createPageUrl("Home"), icon: Home },

@@ -7,22 +7,23 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function HeroSection() {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const baseUrl = import.meta.env.BASE_URL;
 
   const slides = [
     {
       title: "Residence Interior Design",
       subtitle: "Crafting warm, stylish homes that reflect who you are",
-      image: "/images/hero-residence.jpg"
+      image: `${baseUrl}images/hero-residence.jpg`
     },
     {
       title: "Commercial Space Interior Design",
       subtitle: "Where brand identity meets modern interior excellence",
-      image: "/images/hero-commercial.jpg"
+      image: `${baseUrl}images/hero-commercial.jpg`
     },
     {
       title: "Curated Furniture & Decor",
       subtitle: "Furniture & Decor that Speaks Your Style",
-      image: "/images/hero-furniture.jpg"
+      image: `${baseUrl}images/hero-furniture.jpg`
     }
   ];
 

@@ -119,7 +119,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     // Keep the browser tab/history icon in sync with the logo stored in the database.
-    const faviconHref = '/d16-favicon.svg?v=1';
+    const faviconHref = `${import.meta.env.BASE_URL}d16-favicon.svg?v=1`;
 
     let link = document.querySelector("link[rel='icon']");
     if (!link) {

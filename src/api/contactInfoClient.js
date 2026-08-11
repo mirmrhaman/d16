@@ -2,6 +2,7 @@ import { base44 } from "@/api/base44Client";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const CONTACT_INFO_ENDPOINT = `${API_BASE_URL}/api/contact-info`;
+const IS_GITHUB_PAGES = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
 const toArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -49,6 +50,9 @@ const requestJson = async (url, options) => {
 
 export const contactInfoClient = {
   async list() {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.ContactInfo.list();
+    }
     try {
       const payload = await requestJson(CONTACT_INFO_ENDPOINT, { method: "GET" });
       return toArray(payload).map(normalizeContact);
@@ -59,6 +63,9 @@ export const contactInfoClient = {
   },
 
   async create(data) {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.ContactInfo.create(data);
+    }
     try {
       const payload = await requestJson(CONTACT_INFO_ENDPOINT, {
         method: "POST",
@@ -72,6 +79,9 @@ export const contactInfoClient = {
   },
 
   async update(id, data) {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.ContactInfo.update(id, data);
+    }
     try {
       const payload = await requestJson(`${CONTACT_INFO_ENDPOINT}/${id}`, {
         method: "PUT",

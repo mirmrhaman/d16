@@ -2,6 +2,7 @@ import { base44 } from "@/api/base44Client";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const STATS_ENDPOINT = `${API_BASE_URL}/api/stats`;
+const IS_GITHUB_PAGES = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
 const toArray = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -36,6 +37,9 @@ const requestJson = async (url, options) => {
 
 export const statsClient = {
   async list() {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.Stats.list("order");
+    }
     try {
       const payload = await requestJson(STATS_ENDPOINT, { method: "GET" });
       return toArray(payload);
@@ -46,6 +50,9 @@ export const statsClient = {
   },
 
   async create(data) {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.Stats.create(data);
+    }
     try {
       const payload = await requestJson(STATS_ENDPOINT, {
         method: "POST",
@@ -59,6 +66,9 @@ export const statsClient = {
   },
 
   async update(id, data) {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.Stats.update(id, data);
+    }
     try {
       const payload = await requestJson(`${STATS_ENDPOINT}/${id}`, {
         method: "PUT",
@@ -72,6 +82,9 @@ export const statsClient = {
   },
 
   async delete(id) {
+    if (IS_GITHUB_PAGES) {
+      return base44.entities.Stats.delete(id);
+    }
     try {
       await requestJson(`${STATS_ENDPOINT}/${id}`, { method: "DELETE" });
       return true;

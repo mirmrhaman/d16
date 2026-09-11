@@ -2,30 +2,39 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
-import { ArrowRight, Home, Building2, Coffee, Hotel } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SiteIcon from "@/components/SiteIcon";
 
 const services = [
   {
-    icon: Home,
+    icon: 'Home',
+    iconKey: 'services.residential',
+    slug: 'home-interior-design',
     title: "Residential Architecture",
     description: "Transform your home into a stunning architectural masterpiece with bespoke designs that blend elegance and functionality.",
     image: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800&q=80"
   },
   {
-    icon: Building2,
+    icon: 'Building2',
+    iconKey: 'services.commercial',
+    slug: 'corporate-office-interior',
     title: "Commercial Architecture",
     description: "Professional architectural solutions for offices and commercial spaces that enhance productivity and brand identity.",
     image: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80"
   },
   {
-    icon: Coffee,
+    icon: 'Coffee',
+    iconKey: 'services.hospitality',
+    slug: 'restaurant-cafe-interior',
     title: "Hospitality Design",
     description: "Expert architectural planning for restaurants and cafes that create memorable customer experiences.",
     image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=80"
   },
   {
-    icon: Hotel,
+    icon: 'Hotel',
+    iconKey: 'services.mixed',
+    slug: 'hotel-hospitality-interior',
     title: "Mixed-Use Developments",
     description: "Comprehensive architectural solutions for hotels and mixed-use buildings that maximize functionality.",
     image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80"
@@ -72,13 +81,13 @@ export default function ServicesPreview() {
               
               <div className="relative p-8 h-80 flex flex-col justify-end">
                 <div className="inline-flex items-center justify-center w-14 h-14 bg-[var(--accent)] rounded-full mb-4">
-                  <service.icon className="text-white" size={28} />
+                  <SiteIcon iconKey={service.iconKey} fallback={service.icon} className="text-white" size={28} />
                 </div>
                 <h3 className="text-3xl font-bold text-white mb-3">{service.title}</h3>
                 <p className="text-gray-200 mb-4 leading-relaxed">{service.description}</p>
-                <div className="flex items-center text-[var(--accent)] font-semibold group-hover:translate-x-2 transition-transform duration-300">
+                <Link to={`/Services/${service.slug}`} className="flex items-center text-[var(--accent)] font-semibold group-hover:translate-x-2 transition-transform duration-300">
                   Learn More <ArrowRight className="ml-2" size={20} />
-                </div>
+                </Link>
               </div>
             </motion.div>
           ))}

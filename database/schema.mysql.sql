@@ -108,6 +108,12 @@ CREATE TABLE IF NOT EXISTS media_assets (
   storage_provider ENUM('s3', 'supabase', 'azure_blob', 'gcs') NOT NULL,
   bucket_name VARCHAR(255) NOT NULL,
   object_key VARCHAR(1024) NOT NULL,
+  -- Fixed-size, case-sensitive identity avoids MySQL's 3072-byte index limit.
+  object_location_hash BINARY(32) GENERATED ALWAYS AS (
+    UNHEX(SHA2(CONCAT(LENGTH(storage_provider), ':', storage_provider,
+                      LENGTH(bucket_name), ':', bucket_name,
+                      LENGTH(object_key), ':', object_key), 256))
+  ) STORED,
   public_url TEXT NULL,
   mime_type VARCHAR(255) NULL,
   size_bytes BIGINT NULL,
@@ -116,7 +122,7 @@ CREATE TABLE IF NOT EXISTS media_assets (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_media_assets_location (storage_provider, bucket_name, object_key),
+  UNIQUE KEY uq_media_assets_location (object_location_hash),
   KEY idx_media_assets_uploaded_by (uploaded_by_user_id),
   CONSTRAINT fk_media_assets_uploaded_by FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

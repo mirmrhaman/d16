@@ -1,16 +1,18 @@
 import React from "react";
-import { blogPostsClient } from "@/api/blogPostsClient";
+import { readPublishedPosts } from "./blogData";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, User, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 export default function Blog() {
-  const { data: posts = [], isLoading } = useQuery({
-    queryKey: ['blogPosts'],
-    queryFn: () => blogPostsClient.list()
+  const { data: posts = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['blogPosts', 'public'],
+    queryFn: readPublishedPosts
   });
 
   const categoryColors = {
@@ -57,7 +59,9 @@ export default function Blog() {
             Make sure you bookmark this page to get updates on new D16 Interior blog posts as soon as they are published!
           </motion.p>
 
-          {isLoading ? (
+          {error ? (
+            <div role="alert" className="py-12 text-center"><p className="mb-4 text-gray-600">We couldn’t load the articles. Please try again.</p><button type="button" onClick={() => refetch()} className="rounded-md bg-[var(--primary)] px-6 py-3 font-semibold text-white">Try again</button></div>
+          ) : isLoading ? (
             <div className="text-center py-12">
               <p className="text-gray-500">Loading blog posts...</p>
             </div>
@@ -86,11 +90,11 @@ export default function Blog() {
                       </div>
                     )}
                     <CardContent className="p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        {post.published_date && (
+                      <div className="flex flex-wrap items-center gap-3 mb-4">
+                        {(post.published_date || post.published_at) && (
                           <div className="flex items-center text-sm text-gray-500">
                             <Calendar size={14} className="mr-1" />
-                            {format(new Date(post.published_date), 'MMM d, yyyy')}
+                            {format(new Date(post.published_date || post.published_at), 'MMM d, yyyy')}
                           </div>
                         )}
                         {post.category && (
@@ -115,9 +119,9 @@ export default function Blog() {
                         </div>
                       )}
 
-                      <div className="flex items-center text-[var(--accent)] font-semibold group-hover:translate-x-2 transition-transform">
+                      <Link to={createPageUrl(`Blog/${post.id}`)} aria-label={`Read ${post.title}`} className="inline-flex items-center text-[var(--accent)] font-semibold group-hover:translate-x-2 transition-transform">
                         Read More <ArrowRight className="ml-2" size={18} />
-                      </div>
+                      </Link>
                     </CardContent>
                   </Card>
                 </motion.div>

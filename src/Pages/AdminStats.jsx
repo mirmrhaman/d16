@@ -10,12 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, ArrowLeft, Award, Users, TrendingUp, Star, Target, Briefcase, Edit } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import SiteIcon from '@/components/SiteIcon';
+import { useAuth } from '@/context/AuthContext';
 
 const iconMap = {
   Award, Users, TrendingUp, Star, Target, Briefcase
 };
 
 export default function AdminStats() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [editingStat, setEditingStat] = useState(null);
 
@@ -119,6 +122,7 @@ export default function AdminStats() {
 
                 <div className="space-y-2">
                   <Label htmlFor="icon">Icon *</Label>
+                  <p className="text-sm text-gray-600">This chooses the built-in icon. Uploaded replacements take priority.{user?.role === 'admin' && <> <Link className="underline" to="/AdminIcons">Upload or manage icons in Website Icons.</Link></>}</p>
                   <Select value={editingStat.icon} onValueChange={(value) => setEditingStat({ ...editingStat, icon: value })}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select icon" />
@@ -154,13 +158,12 @@ export default function AdminStats() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {stats.map((stat) => {
-            const Icon = iconMap[stat.icon] || Award;
             return (
               <Card key={stat.id}>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-2.5 sm:p-3 bg-[var(--accent)] rounded-lg">
-                      <Icon className="text-white" size={20} />
+                      <SiteIcon iconKey={`stats.${stat.id}`} fallback={stat.icon || 'Award'} className="text-white" size={20} />
                     </div>
                     <div className="text-3xl sm:text-4xl font-bold text-[var(--primary)]">{stat.value}</div>
                   </div>

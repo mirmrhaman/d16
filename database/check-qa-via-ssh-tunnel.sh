@@ -4,19 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-$SCRIPT_DIR/.env.qa.local}"
 MODE="${2:-verify}"
+if [[ "${D16_QA_ENV_LOADED:-}" != "1" ]]; then
+  exec node "$SCRIPT_DIR/run-qa-env.mjs" "$ENV_FILE" bash "$0" "$ENV_FILE" "$MODE"
+fi
 
 echo "[qa-db-tunnel] Starting QA check via SSH tunnel"
 
-if [[ -f "$ENV_FILE" ]]; then
-	# shellcheck disable=SC1090
-	set -a
-	source "$ENV_FILE"
-	set +a
-	echo "[qa-db-tunnel] Loaded environment from $ENV_FILE"
-else
-	echo "[qa-db-tunnel] ERROR: Env file not found at $ENV_FILE"
-	exit 1
-fi
+echo "[qa-db-tunnel] Environment loaded safely"
 
 required_vars=(DB_NAME DB_USER DB_PASSWORD)
 missing=()
@@ -75,7 +69,6 @@ if [[ "$MODE" != "check" && "$MODE" != "verify" ]]; then
 	exit 1
 fi
 
-TEMP_ENV="$(mktemp)"
 SSH_PID=""
 SSH_LOG="$(mktemp)"
 
@@ -84,25 +77,16 @@ cleanup() {
 		kill "$SSH_PID" >/dev/null 2>&1 || true
 		wait "$SSH_PID" >/dev/null 2>&1 || true
 	fi
-	rm -f "$TEMP_ENV"
 	rm -f "$SSH_LOG"
 }
 trap cleanup EXIT INT TERM
 
-cat > "$TEMP_ENV" <<EOF
-DB_HOST=127.0.0.1
-DB_PORT=$QA_LOCAL_FORWARD_PORT
-DB_NAME=$DB_NAME
-DB_USER=$DB_USER
-DB_PASSWORD=$DB_PASSWORD
-NODE_ENV=${NODE_ENV:-qa}
-EOF
-
 echo "[qa-db-tunnel] Opening SSH tunnel: 127.0.0.1:$QA_LOCAL_FORWARD_PORT -> $QA_REMOTE_DB_HOST:$QA_REMOTE_DB_PORT via $QA_SSH_USER@$QA_SSH_HOST:$QA_SSH_PORT"
 ssh -p "$QA_SSH_PORT" \
 	-o ExitOnForwardFailure=yes \
+	-o ConnectTimeout=10 \
 	-o ServerAliveInterval=30 \
-	-L "${QA_LOCAL_FORWARD_PORT}:${QA_REMOTE_DB_HOST}:${QA_REMOTE_DB_PORT}" \
+	-L "127.0.0.1:${QA_LOCAL_FORWARD_PORT}:${QA_REMOTE_DB_HOST}:${QA_REMOTE_DB_PORT}" \
 	"${QA_SSH_USER}@${QA_SSH_HOST}" \
 	-N >"$SSH_LOG" 2>&1 &
 SSH_PID="$!"
@@ -133,9 +117,9 @@ fi
 echo "[qa-db-tunnel] SSH tunnel is ready"
 
 if [[ "$MODE" == "check" ]]; then
-	bash "$SCRIPT_DIR/check-qa-connection.sh" "$TEMP_ENV"
+	DB_HOST=127.0.0.1 DB_PORT="$QA_LOCAL_FORWARD_PORT" NODE_ENV=qa bash "$SCRIPT_DIR/check-qa-connection.sh" -
 else
-	bash "$SCRIPT_DIR/check-qa-schema-seed.sh" "$TEMP_ENV"
+	DB_HOST=127.0.0.1 DB_PORT="$QA_LOCAL_FORWARD_PORT" NODE_ENV=qa bash "$SCRIPT_DIR/check-qa-schema-seed.sh" -
 fi
 
 echo "[qa-db-tunnel] SUCCESS: Completed QA $MODE via SSH tunnel"

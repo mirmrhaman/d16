@@ -4,6 +4,7 @@
 # Dependencies / build output
 node_modules/
 dist/
+release-artifacts/
 
 # OS/editor noise
 .DS_Store

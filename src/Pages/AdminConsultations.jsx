@@ -15,7 +15,7 @@ import { format } from "date-fns";
 export default function AdminConsultations() {
   const queryClient = useQueryClient();
 
-  const { data: consultations = [], isLoading } = useQuery({
+  const { data: consultations = [], isLoading, error } = useQuery({
     queryKey: ['consultations'],
     queryFn: () => base44.entities.Consultation.list('-created_date')
   });
@@ -47,6 +47,8 @@ export default function AdminConsultations() {
           </div>
         </div>
 
+        {error && <p role="alert" className="p-4 bg-red-50 text-red-800">{error.message}</p>}
+        {updateMutation.error && <p role="alert" className="p-4 bg-red-50 text-red-800">{updateMutation.error.message}</p>}
         {isLoading ? (
           <div className="text-center py-12">
             <p className="text-gray-500">Loading consultations...</p>
@@ -70,7 +72,7 @@ export default function AdminConsultations() {
                           </Badge>
                         </div>
                         <div className="text-sm text-gray-500">
-                          {format(new Date(consultation.created_date), 'MMM d, yyyy')}
+                          {format(new Date(consultation.created_date || consultation.created_at), 'MMM d, yyyy HH:mm:ss')}
                         </div>
                       </div>
 

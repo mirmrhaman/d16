@@ -1,240 +1,47 @@
-import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ArrowLeft, UserPlus, Save } from "lucide-react";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { IS_DEMO } from '@/api/transport';
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
-const roles = [
-  { value: "viewer", label: "Viewer (no admin access)" },
-  { value: "super", label: "Super User (content edit)" },
-  { value: "admin", label: "Admin (full access)" },
-];
-
+const blank = { email: '', name: '', phone: '', password: '', role: 'viewer', verified: false };
 export default function AdminUsers() {
-  const queryClient = useQueryClient();
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => base44.entities.User.list(),
+  const cache = useQueryClient();
+  const [form, setForm] = useState(blank);
+  const [editingId, setEditingId] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const { data: users = [], isLoading, error } = useQuery({ queryKey: ['users'], queryFn: () => base44.entities.User.list() });
+  const save = useMutation({
+    mutationFn: () => editingId ? base44.entities.User.update(editingId, { ...form, password: form.password || undefined }) : base44.entities.User.create(form),
+    onSuccess: () => { cache.invalidateQueries({ queryKey: ['users'] }); setForm(blank); setEditingId(null); setSaved(true); },
   });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.User.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries(["users"]),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (payload) => base44.entities.User.create(payload),
-    onSuccess: () => queryClient.invalidateQueries(["users"]),
-  });
-
-  const [newEmail, setNewEmail] = useState("");
-  const [newPasswords, setNewPasswords] = useState({});
-  const [newPhones, setNewPhones] = useState({});
-
-  const toggleVerified = (user) => {
-    updateMutation.mutate({
-      id: user.id,
-      data: { ...user, verified: !user.verified },
-    });
-  };
-
-  const changeRole = (user, role) => {
-    updateMutation.mutate({
-      id: user.id,
-      data: { ...user, role },
-    });
-  };
-
-  const addUser = () => {
-    const email = newEmail.trim();
-    if (!email) return;
-    createMutation.mutate({
-      email,
-      name: email.split("@")[0],
-      role: "viewer",
-      verified: false,
-      password: "changeme123",
-      two_factor_enabled: false,
-      two_factor_code: "123456",
-      phone: "",
-    });
-    setNewEmail("");
-  };
-
-  const updatePassword = (user) => {
-    const nextPassword = newPasswords[user.id];
-    if (!nextPassword) return;
-    updateMutation.mutate({
-      id: user.id,
-      data: { ...user, password: nextPassword },
-    });
-    setNewPasswords((prev) => ({ ...prev, [user.id]: "" }));
-  };
-
-  const updatePhone = (user) => {
-    const nextPhone = newPhones[user.id];
-    if (nextPhone === undefined) return;
-    updateMutation.mutate({
-      id: user.id,
-      data: { ...user, phone: nextPhone },
-    });
-  };
-
-  const toggle2FA = (user) => {
-    updateMutation.mutate({
-      id: user.id,
-      data: { ...user, two_factor_enabled: !user.two_factor_enabled },
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <p className="text-gray-600">Loading users...</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-6 sm:py-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 sm:mb-8 flex items-center gap-3 sm:gap-4">
-          <Link to={createPageUrl("AdminDashboard")}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft size={20} />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--primary)]">User Management</h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Verify emails and assign roles (Admin / Super User)
-            </p>
-          </div>
-        </div>
-
-        <Card className="mb-6">
-          <CardHeader className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-[var(--accent-light)]">
-              <UserPlus className="text-[var(--primary)]" />
-            </div>
-            <div>
-              <CardTitle>Invite User</CardTitle>
-              <p className="text-sm text-gray-600">Add a new user email, then verify and set a role</p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-3">
-            <Input
-              type="email"
-              placeholder="newuser@example.com"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="flex-1"
-            />
-            <Button onClick={addUser} className="bg-[var(--primary)] hover:bg-[var(--primary-dark)]" disabled={createMutation.isLoading}>
-              Add User
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          {users.map((user) => (
-            <Card key={user.id}>
-              <CardContent className="py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-[var(--primary)]">{user.email}</p>
-                  <p className="text-sm text-gray-600">Role: {user.role}</p>
-                  <p className="text-xs text-gray-500">Verified: {user.verified ? "Yes" : "No"}</p>
-                  <p className="text-xs text-gray-500">Phone: {user.phone || "Not set"}</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Role</Label>
-                    <select
-                      value={user.role}
-                      onChange={(e) => changeRole(user, e.target.value)}
-                      className="border rounded-md px-3 py-2 text-sm"
-                    >
-                      {roles.map((role) => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Verification</Label>
-                    <Button
-                      variant={user.verified ? "outline" : "default"}
-                      className={user.verified ? "" : "bg-[var(--primary)] hover:bg-[var(--primary-dark)]"}
-                      onClick={() => toggleVerified(user)}
-                    >
-                      {user.verified ? "Revoke" : "Verify"}
-                    </Button>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Set Password</Label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Input
-                        type="password"
-                        placeholder="New password"
-                        value={newPasswords[user.id] || ""}
-                        onChange={(e) => setNewPasswords((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                        className="sm:w-40"
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={() => updatePassword(user)}
-                        disabled={updateMutation.isLoading || !(newPasswords[user.id] || "").trim()}
-                      >
-                        <Save className="mr-1" size={16} />
-                        Save
-                      </Button>
-                    </div>
-                    <p className="text-[11px] text-gray-500">Initial password for new users: changeme123</p>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Phone for OTP</Label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Input
-                        type="tel"
-                        placeholder="+8801XXXXXXXXX"
-                        value={newPhones[user.id] ?? user.phone ?? ""}
-                        onChange={(e) => setNewPhones((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                        className="sm:w-48"
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={() => updatePhone(user)}
-                        disabled={updateMutation.isLoading}
-                      >
-                        <Save className="mr-1" size={16} />
-                        Save
-                      </Button>
-                    </div>
-                    <Button
-                      variant={user.two_factor_enabled ? "default" : "outline"}
-                      className={user.two_factor_enabled ? "bg-[var(--primary)] hover:bg-[var(--primary-dark)]" : ""}
-                      onClick={() => toggle2FA(user)}
-                      disabled={updateMutation.isLoading}
-                    >
-                      {user.two_factor_enabled ? "Disable 2FA" : "Enable 2FA"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  function edit(user) { setEditingId(user.id); setForm({ email: user.email, name: user.name, phone: user.phone, role: user.role, verified: user.verified, is_active: user.is_active, password: '' }); setSaved(false); }
+  return <main className="min-h-screen bg-slate-50 py-10 px-4"><div className="max-w-5xl mx-auto space-y-6">
+    <Link to="/AdminDashboard" className="text-sm underline">← Admin dashboard</Link>
+    <h1 className="text-3xl font-bold text-[var(--primary)]">Team accounts</h1>
+    <p className="text-slate-600">Create and approve team access. Passwords are securely hashed by the server and never returned. Updating access or a password signs that user out of existing sessions.</p>
+    {IS_DEMO && <p className="bg-amber-50 p-4 rounded-lg">Account management is disabled in preview. Connect QA before entering real credentials.</p>}
+    {saved && <p role="status" className="text-green-800">Account saved.</p>}
+    {(error || save.error) && <p role="alert" className="text-red-800">{(error || save.error).message}</p>}
+    <form onSubmit={(e) => { e.preventDefault(); setSaved(false); save.mutate(); }} className="p-6 bg-white border rounded-xl space-y-4">
+      <h2 className="text-xl font-semibold">{editingId ? 'Edit account' : 'Create account'}</h2>
+      <fieldset disabled={IS_DEMO || save.isPending} className="grid sm:grid-cols-2 gap-4">
+        <label>Name<Input value={form.name} maxLength={255} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+        <label>Email<Input type="email" autoComplete="off" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+        <label>Phone<Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+        <label>{editingId ? 'New password (leave blank to keep)' : 'Initial password (12+ characters)'}<Input type="password" autoComplete="new-password" minLength={12} required={!editingId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
+        <label>Role<select className="block w-full rounded-md border p-2" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="viewer">Viewer</option><option value="super">Content editor (Super)</option><option value="admin">Administrator</option></select></label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={form.verified} onChange={(e) => setForm({ ...form, verified: e.target.checked })} />Approved to sign in</label>
+        {editingId && <label className="flex items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />Account active</label>}
+        <div className="flex gap-3"><Button disabled={IS_DEMO || save.isPending}>{save.isPending ? 'Saving…' : 'Save account'}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(blank); }}>Cancel</Button>}</div>
+      </fieldset>
+    </form>
+    <p className="text-sm text-slate-500">MFA enrollment and automatic invitations require a real delivery/verification provider; they are not simulated. Share initial access through your approved secure channel.</p>
+    {isLoading ? <p>Loading accounts…</p> : <ul className="space-y-3">{users.map((user) => <li key={user.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5">
+      <div><h2 className="font-semibold">{user.name || user.email}</h2><p className="text-sm text-slate-600">{user.email} · {user.role} · {user.is_active && user.verified ? 'Active & approved' : 'Sign-in blocked'}</p><code className="text-xs text-slate-500 break-all">{user.id}</code></div>
+      <Button variant="outline" onClick={() => edit(user)}>Edit account</Button>
+    </li>)}</ul>}
+  </div></main>;
 }

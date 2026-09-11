@@ -1,25 +1,29 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { MessageSquare, FileText, Hammer, CheckCircle } from "lucide-react";
+import SiteIcon from "@/components/SiteIcon";
 
 const steps = [
   {
-    icon: MessageSquare,
+    icon: 'MessageSquare',
+    iconKey: 'process.consultation',
     title: "Initial Consultation",
     description: "A professional architect from our team connects with you to understand your requirements and vision for the project."
   },
   {
-    icon: FileText,
+    icon: 'FileText',
+    iconKey: 'process.design',
     title: "Design Development",
     description: "We create comprehensive architectural plans and 3D visualizations, establishing a clear timeline and budget for your project."
   },
   {
-    icon: Hammer,
+    icon: 'Hammer',
+    iconKey: 'process.execution',
     title: "Project Execution",
     description: "Our dedicated team executes the design plan with precision. Professional project management ensures quality at every stage."
   },
   {
-    icon: CheckCircle,
+    icon: 'CheckCircle',
+    iconKey: 'process.handover',
     title: "Final Handover",
     description: "Post project completion, we conduct a thorough inspection and hand over the beautifully crafted space to you."
   }
@@ -57,7 +61,7 @@ export default function ProcessSection() {
               <div className="text-center">
                 <div className="relative inline-block mb-6">
                   <div className="w-24 h-24 bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] rounded-full flex items-center justify-center luxury-shadow">
-                    <step.icon className="text-white" size={40} />
+                    <SiteIcon iconKey={step.iconKey} fallback={step.icon} className="text-white" size={40} />
                   </div>
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-[var(--accent)] rounded-full flex items-center justify-center text-white font-bold">
                     {index + 1}

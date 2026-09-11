@@ -1,0 +1,236 @@
+// Disposable integration verification. Never reads your real QA environment file.
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import mysql from 'mysql2/promise';
+import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../src/data/aboutContent.js';
+import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../src/data/siteAppearance.js';
+
+const container = `d16-sync-test-${randomUUID().slice(0, 8)}`;
+const password = randomBytes(32).toString('base64url');
+const docker = (args, options = {}) => {
+  const result = spawnSync('docker', args, { encoding: 'utf8', ...options });
+  if (result.status !== 0) throw new Error(`Docker command failed: ${result.stderr || result.error?.message}`);
+  return result.stdout.trim();
+};
+let database, server, applicationPool;
+let created = false;
+try {
+  docker(['run', '--rm', '-d', '--name', container, '-p', '127.0.0.1::3306', '-e', 'MARIADB_RANDOM_ROOT_PASSWORD=1', '-e', 'MARIADB_DATABASE=dinterio_d16_qa', '-e', 'MARIADB_USER=d16_local_test', '-e', 'MARIADB_PASSWORD', 'mariadb:10.11'], { env: { ...process.env, MARIADB_PASSWORD: password } });
+  created = true;
+  const mapped = docker(['port', container, '3306/tcp']);
+  const port = Number(mapped.split(':').at(-1));
+  assert(port > 0 && mapped.startsWith('127.0.0.1:'));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { database = await mysql.createConnection({ host: '127.0.0.1', port, user: 'd16_local_test', password, database: 'dinterio_d16_qa', multipleStatements: true, timezone: 'Z' }); break; }
+    catch { await delay(500); }
+  }
+  assert(database, 'Local database did not become ready');
+  await database.query(readFileSync('database/schema.mysql.sql', 'utf8'));
+  await database.query(readFileSync('database/seed.qa.synthetic.mysql.sql', 'utf8'));
+  const migrations = readdirSync('database/migrations').filter((name) => name.endsWith('.sql')).sort();
+  for (const name of migrations) await database.query(readFileSync(`database/migrations/${name}`, 'utf8'));
+  const [[seeded]] = await database.query("SELECT payload FROM app_content WHERE entity_type='Service' AND id='32000000-0000-4000-8000-000000000001'");
+  const seededPayload = typeof seeded.payload === 'string' ? JSON.parse(seeded.payload) : seeded.payload;
+  assert.deepEqual(seededPayload.features, ['Synthetic feature A', 'Synthetic feature B']);
+  const [[seededAbout]] = await database.query("SELECT payload FROM app_content WHERE entity_type='AboutPage' AND id=?", [ABOUT_PAGE_ID]);
+  assert.deepEqual(typeof seededAbout.payload === 'string' ? JSON.parse(seededAbout.payload) : seededAbout.payload, DEFAULT_ABOUT);
+  const appearanceFixtures = [
+    ['DashboardLayout', DASHBOARD_LAYOUT_ID, DEFAULT_DASHBOARD_LAYOUT, { ...DEFAULT_DASHBOARD_LAYOUT, card_order: ['AdminIcons', 'AdminAbout'] }],
+    ['WebsiteIcons', WEBSITE_ICONS_ID, DEFAULT_WEBSITE_ICONS, { ...DEFAULT_WEBSITE_ICONS, icons: { 'values.budget': { icon_name: 'Wallet', icon_url: '' } } }],
+  ];
+  for (const [entity, id, defaults, editedPayload] of appearanceFixtures) {
+    const [[seededConfig]] = await database.query('SELECT payload FROM app_content WHERE entity_type=? AND id=?', [entity, id]);
+    assert.deepEqual(typeof seededConfig.payload === 'string' ? JSON.parse(seededConfig.payload) : seededConfig.payload, defaults);
+    await database.query('UPDATE app_content SET payload=? WHERE entity_type=? AND id=?', [JSON.stringify(editedPayload), entity, id]);
+  }
+  await database.query("UPDATE app_content SET payload=JSON_SET(payload,'$.mission_text','Retain edited QA mission') WHERE entity_type='AboutPage' AND id=?", [ABOUT_PAGE_ID]);
+  await database.query("DELETE rp FROM role_permissions rp JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id WHERE r.role_key='super' AND p.permission_key='section.about.write'");
+  await database.query("UPDATE app_content SET payload=JSON_SET(payload,'$.description','Retain edited QA content') WHERE entity_type='Service' AND id='32000000-0000-4000-8000-000000000001'");
+  for (const name of migrations) await database.query(readFileSync(`database/migrations/${name}`, 'utf8'));
+  const [[retained]] = await database.query("SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.description')) AS description FROM app_content WHERE entity_type='Service' AND id='32000000-0000-4000-8000-000000000001'");
+  assert.equal(retained.description, 'Retain edited QA content');
+  const [[retainedAbout]] = await database.query("SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.mission_text')) AS mission FROM app_content WHERE entity_type='AboutPage' AND id=?", [ABOUT_PAGE_ID]);
+  assert.equal(retainedAbout.mission, 'Retain edited QA mission');
+  const [revokedGrants] = await database.query("SELECT rp.id FROM role_permissions rp JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id WHERE r.role_key='super' AND p.permission_key='section.about.write'");
+  assert.equal(revokedGrants.length, 0);
+  for (const [entity, id, , editedPayload] of appearanceFixtures) {
+    const [[retainedConfig]] = await database.query('SELECT payload FROM app_content WHERE entity_type=? AND id=?', [entity, id]);
+    assert.deepEqual(typeof retainedConfig.payload === 'string' ? JSON.parse(retainedConfig.payload) : retainedConfig.payload, editedPayload);
+  }
+  console.log('PASS: fresh schema and repeatable additive migrations retain edited About/appearance content and revoked grants');
+
+  delete process.env.API_ENV_FILE;
+  delete process.env.DB_SOCKET_PATH;
+  delete process.env.DB_SSL_CA_FILE;
+  Object.assign(process.env, { NODE_ENV: 'qa', DB_HOST: '127.0.0.1', DB_PORT: String(port), DB_NAME: 'dinterio_d16_qa', DB_USER: 'd16_local_test', DB_PASSWORD: password, DB_SSL: 'false', APP_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'), APP_HMAC_KEY_BASE64: randomBytes(32).toString('base64') });
+  const { pool } = await import('../server/src/db.js'); applicationPool = pool;
+  const { createAuthService } = await import('../server/src/authService.js');
+  const { createApp } = await import('../server/src/app.js');
+  const content = await import('../server/src/contentService.js');
+  const { LIVE_SERVICES, LIVE_CONCEPTS } = await import('../src/data/liveContent.js');
+  const auth = createAuthService({ pool });
+  const adminPassword = randomBytes(24).toString('base64url');
+  const admin = await auth.bootstrapAdmin({ email: 'admin@example.test', name: 'QA Administrator', password: adminPassword });
+  await assert.rejects(auth.bootstrapAdmin({ email: 'another@example.test', password: adminPassword }));
+  const [users] = await database.query('SELECT * FROM users');
+  assert(!users[0].email_ciphertext.toString().includes('admin@example.test'));
+  assert(users[0].password_hash.startsWith('scrypt$'));
+  assert(!JSON.stringify(admin).includes(adminPassword));
+  console.log('PASS: one-time admin bootstrap, encrypted email, hashed password');
+
+  const origin = 'http://127.0.0.1:5173';
+  const app = createApp({ pool, content, auth, allowedOrigins: [origin], secureCookies: false });
+  server = await new Promise((resolve) => { const listener = app.listen(0, '127.0.0.1', () => resolve(listener)); });
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  let cookie = '';
+  async function request(path, method = 'GET', payload, session = cookie, requestOrigin = origin) {
+    const response = await fetch(base + path, { method, headers: { Origin: requestOrigin, 'Content-Type': 'application/json', ...(session ? { Cookie: session } : {}) }, ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}) });
+    const body = response.status === 204 ? null : await response.json();
+    return { response, body, status: response.status };
+  }
+  assert.equal((await request('/health')).status, 200);
+  assert.equal((await request('/services', 'POST', { title: 'Blocked' }, '')).status, 401);
+  assert.equal((await request('/services', 'POST', { title: 'Blocked' }, '', 'https://untrusted.example')).status, 403);
+  assert.equal((await request('/consultations', 'GET', undefined, '')).status, 401);
+  const login = await request('/auth/login', 'POST', { email: 'admin@example.test', password: adminPassword });
+  assert.equal(login.status, 200, JSON.stringify(login.body));
+  cookie = login.response.headers.get('set-cookie').split(';')[0];
+  assert(login.response.headers.get('set-cookie').includes('HttpOnly'));
+  assert(login.response.headers.get('set-cookie').includes('SameSite=Strict'));
+  assert.equal((await request('/auth/me')).body.user.id, admin.id);
+  console.log('PASS: real cookie login, public/private boundaries and origin checks');
+
+  assert.equal((await request('/dashboard-layout', 'GET', undefined, '')).status, 401);
+  assert.equal((await request('/website-icons', 'GET', undefined, '')).status, 200);
+  for (const [endpoint, entity, id, field, value] of [
+    ['/dashboard-layout', 'DashboardLayout', DASHBOARD_LAYOUT_ID, 'card_order', ['AdminAbout', 'AdminIcons']],
+    ['/website-icons', 'WebsiteIcons', WEBSITE_ICONS_ID, 'icons', { 'values.budget': { icon_name: 'Star', icon_url: '' }, 'about.mission': { icon_name: 'Image', icon_url: '/uploads/test-icon.webp' } }],
+  ]) {
+    const current = (await request(endpoint)).body[0];
+    assert.equal(current.id, id);
+    assert.equal((await request(`${endpoint}/${id}`, 'PUT', { [field]: value })).status, 400);
+    const editedConfig = await request(`${endpoint}/${id}`, 'PUT', { ...current, [field]: value });
+    assert.equal(editedConfig.status, 200, JSON.stringify(editedConfig.body));
+    assert.deepEqual(editedConfig.body[field], value);
+    assert.deepEqual((await request(endpoint)).body[0][field], value);
+    assert.equal((await request(`${endpoint}/${id}`, 'PUT', { ...current, [field]: value })).status, 409);
+    assert.equal((await request(endpoint, 'POST', { ...current, [field]: value })).status, 409);
+    assert.equal((await request(`${endpoint}/${id}`, 'DELETE', {})).status, 405);
+    const invalid = entity === 'DashboardLayout' ? ['AdminAbout', 'AdminAbout'] : { 'values.budget': { icon_name: 'PiggyBank', icon_url: '' } };
+    assert.equal((await request(`${endpoint}/${id}`, 'PUT', { ...editedConfig.body, [field]: invalid })).status, 400);
+    const concurrent = await Promise.all([
+      request(`${endpoint}/${id}`, 'PUT', { ...editedConfig.body, title: 'First concurrent editor' }),
+      request(`${endpoint}/${id}`, 'PUT', { ...editedConfig.body, title: 'Second concurrent editor' }),
+    ]);
+    assert.deepEqual(concurrent.map((entry) => entry.status).sort(), [200, 409]);
+    const configAudit = (await request('/audit-logs')).body.filter((row) => row.entity_name === entity);
+    assert.equal(configAudit.length, 2);
+    assert(configAudit.every((row) => row.actor_user_id === admin.id && row.created_at));
+    assert(configAudit.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify([field])));
+    assert(configAudit.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['title'])));
+    const beforeFailure = (await request(endpoint)).body[0];
+    const failingAppearance = content.createContentRepository({ database: pool, audit: async () => { throw new Error('synthetic appearance audit failure'); } });
+    await assert.rejects(failingAppearance.updateContent(entity, id, { ...beforeFailure, title: 'Must roll back appearance' }, { userId: admin.id }), /audit failure/);
+    assert.deepEqual((await request(endpoint)).body[0], beforeFailure);
+  }
+  console.log('PASS: shared dashboard/icon persistence, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
+
+  const about = (await request('/about-page', 'GET', undefined, '')).body[0];
+  assert.equal(about.id, ABOUT_PAGE_ID);
+  const aboutEdit = await request(`/about-page/${about.id}`, 'PUT', { version: about.version, mission_text: 'Approved synthetic mission', vision_text: 'Approved synthetic vision', team_members: [...about.team_members].reverse() });
+  assert.equal(aboutEdit.status, 200, JSON.stringify(aboutEdit.body));
+  assert.equal(aboutEdit.body.version, about.version + 1);
+  assert.equal(aboutEdit.body.mission_text, 'Approved synthetic mission');
+  assert.equal(aboutEdit.body.vision_text, 'Approved synthetic vision');
+  assert.deepEqual((await request('/about-page', 'GET', undefined, '')).body[0].team_members, [...about.team_members].reverse());
+  assert.equal((await request(`/about-page/${about.id}`, 'PUT', { version: about.version, title: 'Stale About overwrite' })).status, 409);
+  assert.equal((await request('/about-page', 'POST', DEFAULT_ABOUT)).status, 409);
+  assert.equal((await request(`/about-page/${about.id}`, 'DELETE', {})).status, 405);
+  assert.equal((await request(`/about-page/${about.id}`, 'PUT', { team_members: [{ id: 'bad', name: 'Test', role: 'Test', image: 'javascript:alert(1)' }] })).status, 400);
+  const removedTeam = await request(`/about-page/${about.id}`, 'PUT', { version: aboutEdit.body.version, team_members: [], approach_steps: [] });
+  assert.equal(removedTeam.status, 200);
+  const emptyAbout = (await request('/about-page', 'GET', undefined, '')).body[0];
+  assert.deepEqual(emptyAbout.team_members, []); assert.deepEqual(emptyAbout.approach_steps, []);
+  const superPassword = randomBytes(24).toString('base64url');
+  const superUser = await request('/users', 'POST', { email: 'about-editor@example.test', name: 'Synthetic About editor', password: superPassword, role: 'super', verified: true });
+  assert.equal(superUser.status, 201, JSON.stringify(superUser.body));
+  const superLogin = await request('/auth/login', 'POST', { email: 'about-editor@example.test', password: superPassword }, '');
+  assert.equal(superLogin.status, 200);
+  const superCookie = superLogin.response.headers.get('set-cookie').split(';')[0];
+  assert.equal((await request('/dashboard-layout', 'GET', undefined, superCookie)).status, 403);
+  for (const [endpoint, id] of [['/dashboard-layout', DASHBOARD_LAYOUT_ID], ['/website-icons', WEBSITE_ICONS_ID]]) {
+    assert.equal((await request(endpoint, 'POST', { title: 'Denied Super configuration' }, superCookie)).status, 403);
+    assert.equal((await request(`${endpoint}/${id}`, 'PUT', { title: 'Denied Super configuration' }, superCookie)).status, 403);
+  }
+  assert.equal((await request(`/about-page/${about.id}`, 'PUT', { mission_text: 'Denied update' }, superCookie)).status, 403);
+  const granted = await request('/access-control/super', 'PUT', { allowed_sections: ['About'] });
+  assert.equal(granted.status, 200, JSON.stringify(granted.body));
+  assert.deepEqual(granted.body.allowed_sections, ['About']);
+  assert.equal((await request(`/about-page/${about.id}`, 'PUT', { version: emptyAbout.version, team_title: 'Approved team heading' }, superCookie)).status, 200);
+  const aboutAudit = (await request('/audit-logs')).body.filter((row) => row.entity_name === 'AboutPage');
+  assert(aboutAudit.some((row) => row.entity_id === ABOUT_PAGE_ID && row.actor_user_id === admin.id && row.created_at));
+  assert(aboutAudit.some((row) => row.actor_user_id === superUser.body.id));
+  assert(!JSON.stringify(aboutAudit).includes('Approved synthetic mission'));
+  console.log('PASS: editable About mission/vision/team, ordered removals, singleton/conflict validation, section grants and attributed audit history');
+
+  const service = await request('/services', 'POST', LIVE_SERVICES[0]);
+  assert.equal(service.status, 201, JSON.stringify(service.body));
+  assert.deepEqual(service.body.sub_services, LIVE_SERVICES[0].sub_services);
+  const edited = await request(`/services/${service.body.id}`, 'PUT', { ...service.body, description: 'Updated by QA' });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.description, 'Updated by QA');
+  assert.equal((await request(`/services/${service.body.id}`, 'PUT', { ...service.body, description: 'Stale update' })).status, 409);
+  const concept = await request('/pic-your-concept', 'POST', LIVE_CONCEPTS[0]);
+  assert.equal(concept.status, 201, JSON.stringify(concept.body));
+  assert.deepEqual(concept.body.sub_services, LIVE_CONCEPTS[0].sub_services);
+  const contact = await request('/contact-info', 'POST', { organization_name: 'D16 Local QA', email: 'studio@example.test', phone: '+8801000000000', theme_color: '#112037', locations: ['Test studio'], social_links: { instagram: 'https://instagram.com/example' } });
+  assert.equal(contact.status, 201, JSON.stringify(contact.body));
+  assert.equal((await request('/contact-info')).body.find((row) => row.id === contact.body.id).email, 'studio@example.test');
+  const [profiles] = await database.query('SELECT * FROM organization_profile WHERE id=?', [contact.body.id]);
+  assert(!profiles[0].contact_email_ciphertext.toString().includes('studio@example.test'));
+  assert.deepEqual((await request('/contact-info')).body.find((row) => row.id === contact.body.id).social_links, { instagram: 'https://instagram.com/example' });
+  console.log('PASS: richer services/concepts, edit conflict detection, encrypted contact/social round trips');
+
+  const visitor = { full_name: 'Synthetic Test Visitor', email: 'visitor@example.test', phone: '+8801999999999', project_type: 'residential', location: 'Private testing address', budget: 'Synthetic budget', message: 'Confidential QA message', preferred_date: '2026-12-01', status: 'completed', actor_user_id: admin.id };
+  const submitted = await request('/consultations', 'POST', visitor, '');
+  assert.equal(submitted.status, 201, JSON.stringify(submitted.body));
+  assert.equal(submitted.body.status, 'pending');
+  assert(!JSON.stringify(submitted.body).includes(visitor.email));
+  const enquiries = await request('/consultations');
+  assert.equal(enquiries.body[0].message, visitor.message);
+  assert.equal(enquiries.body[0].preferred_date, visitor.preferred_date);
+  assert.equal(enquiries.body[0].project_type, visitor.project_type);
+  const [enquiryRows] = await database.query('SELECT * FROM consultation_requests');
+  assert(!enquiryRows[0].email_ciphertext.toString().includes(visitor.email));
+  assert.equal(enquiryRows[0].message, null);
+  assert.equal(enquiryRows[0].location, null);
+  assert.equal(enquiryRows[0].project_type, null);
+  const [privateRows] = await database.query('SELECT * FROM app_private_details');
+  assert(!privateRows[0].payload_ciphertext.toString().includes(visitor.message));
+  assert.equal((await request(`/consultations/${submitted.body.id}`, 'PUT', { status: 'contacted' })).status, 200);
+  const audit = (await request('/audit-logs')).body;
+  assert(audit.some((row) => row.entity_id === service.body.id && row.actor_user_id === admin.id && row.created_at));
+  assert(audit.some((row) => row.entity_id === submitted.body.id && row.actor_user_id === null && row.action === 'create'));
+  assert(!JSON.stringify(audit).includes(visitor.message));
+  console.log('PASS: confidential consultation encryption/decryption, unforgeable actor and dated audit history');
+
+  const failingRepository = content.createContentRepository({ database: pool, audit: async () => { throw new Error('test audit failure'); } });
+  await assert.rejects(failingRepository.createContent('Service', { title: 'Must roll back' }, { userId: admin.id }));
+  assert(!(await content.listContent('Service')).some((row) => row.title === 'Must roll back'));
+  const draft = await request('/blog-posts', 'POST', { title: 'Private draft' });
+  assert.equal(draft.status, 201);
+  assert(!(await request('/blog-posts', 'GET', undefined, '')).body.some((row) => row.id === draft.body.id));
+  assert((await request('/blog-posts?admin=1')).body.some((row) => row.id === draft.body.id));
+  assert.equal((await request('/auth/logout', 'POST', {})).status, 204);
+  assert.equal((await request('/auth/me')).status, 401);
+  console.log('PASS: audit failure rolls back writes, drafts stay private, logout revokes session');
+  console.log('ALL LOCAL DATABASE INTEGRATION CHECKS PASSED. Hosting QA/production were not contacted.');
+} finally {
+  if (server) await new Promise((resolve) => server.close(resolve));
+  if (applicationPool) await applicationPool.end();
+  if (database) await database.end();
+  if (created) docker(['stop', container]);
+}

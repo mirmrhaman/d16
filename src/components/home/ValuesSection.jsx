@@ -1,25 +1,29 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { UserCheck, PiggyBank, Target, Clock } from "lucide-react";
+import SiteIcon from "@/components/SiteIcon";
 
 const values = [
   {
-    icon: UserCheck,
+    icon: 'UserCheck',
+    iconKey: 'values.personalized',
     title: "Personalized Design Approach",
     description: "We tailor every project to reflect your unique style, preferences, and lifestyle, creating spaces that truly feel like home."
   },
   {
-    icon: PiggyBank,
+    icon: 'Wallet',
+    iconKey: 'values.budget',
     title: "Practical & Budget-Friendly Solutions",
     description: "We work within your budget to deliver stunning interiors without compromising on quality or functionality."
   },
   {
-    icon: Target,
+    icon: 'Target',
+    iconKey: 'values.detail',
     title: "Detail-Oriented & Style-Driven",
     description: "Every detail matters to us. We pay meticulous attention to aesthetics, materials, and finishing touches."
   },
   {
-    icon: Clock,
+    icon: 'Clock',
+    iconKey: 'values.delivery',
     title: "On-Time Project Delivery",
     description: "We understand the importance of timelines. Our efficient process ensures your project is completed on schedule."
   }
@@ -59,7 +63,7 @@ export default function ValuesSection() {
               className="group rounded-2xl p-8 text-center border border-white/20 bg-white/10 backdrop-blur-md hover:bg-white/15 transition-all duration-300 hover:-translate-y-2"
             >
               <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-6 shadow-lg group-hover:scale-105 transition-transform duration-300">
-                <value.icon className="text-[var(--primary-dark)]" size={30} />
+                <SiteIcon iconKey={value.iconKey} fallback={value.icon} className="text-[var(--primary-dark)]" size={30} />
               </div>
               <h3 className="text-xl font-bold text-white mb-3">{value.title}</h3>
               <p className="text-slate-200 leading-relaxed">{value.description}</p>
@@ -70,4 +74,3 @@ export default function ValuesSection() {
     </section>
   );
 }
-

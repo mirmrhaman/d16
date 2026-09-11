@@ -2,13 +2,15 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, BookOpen, Images } from "lucide-react";
+import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, Images, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { contactInfoClient } from "@/api/contactInfoClient";
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQuery
 import { useAuth } from "@/context/AuthContext";
+import { adminLanding } from '@/api/permissions';
+import { IS_DEMO } from '@/api/transport';
 
-const DEFAULT_THEME_COLOR = "#1e3a5f";
+const DEFAULT_THEME_COLOR = "#112037";
 const DEFAULT_LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690395669c778d5c32d51682/5ac5acb53_image.png";
 
 const normalizeHex = (value) => {
@@ -49,7 +51,7 @@ export default function Layout({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [brandingNonce, setBrandingNonce] = useState(Date.now());
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, authError } = useAuth();
   const queryClient = useQueryClient();
 
   // Fetch contact info
@@ -72,25 +74,15 @@ export default function Layout({ children }) {
   const locations = Array.isArray(contact.locations) && contact.locations.length > 0
     ? contact.locations
     : ['Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi'];
+  // An intentionally empty social profile must stay empty after saving.
+  const socialLinks = Object.fromEntries(Object.entries(contact.social_links || {}).filter(([, url]) => typeof url === 'string' && /^https?:\/\//i.test(url)));
 
   useEffect(() => {
     // In this mock setup, admin and super roles both count for admin menu visibility
     setIsAdmin(user?.role === 'admin' || user?.role === 'super');
   }, [user]);
 
-  useEffect(() => {
-    // Backfill missing branding fields in older local records so UI is database-driven.
-    if (!contact?.id) return;
-    const nextTheme = normalizeHex(contact.theme_color) || DEFAULT_THEME_COLOR;
-    const nextLogo = contact.logo_url || DEFAULT_LOGO_URL;
-    if (contact.theme_color === nextTheme && contact.logo_url === nextLogo) return;
-
-    contactInfoClient.update(contact.id, {
-      ...contact,
-      theme_color: nextTheme,
-      logo_url: nextLogo,
-    });
-  }, [contact]);
+  // Missing branding uses presentation defaults only; browsing never writes data.
 
   useEffect(() => {
     const refreshBranding = () => {
@@ -133,10 +125,11 @@ export default function Layout({ children }) {
 
   const navigationItems = [
     { title: "Home", url: createPageUrl("Home"), icon: Home },
+    { title: "About", url: createPageUrl("About"), icon: Users },
     { title: "Services", url: createPageUrl("Services"), icon: Briefcase },
     { title: "Portfolio", url: createPageUrl("Portfolio"), icon: FolderOpen },
+    { title: "Pic Your Concept", url: createPageUrl("PicYourConcept"), icon: Images },
     { title: "Gallery", url: createPageUrl("Gallery"), icon: Images },
-    { title: "About", url: createPageUrl("About"), icon: Users },
     { title: "Blog", url: createPageUrl("Blog"), icon: BookOpen },
     { title: "Contact", url: createPageUrl("Contact"), icon: Mail },
   ];
@@ -145,6 +138,7 @@ export default function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-white">
+      {authError && user && <p role="alert" className="bg-red-50 text-red-800 p-3 text-center">{authError}</p>}
       <style>{`
         :root {
           --primary: ${baseThemeColor};
@@ -191,7 +185,7 @@ export default function Layout({ children }) {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-8">
+            <nav className="hidden xl:flex items-center space-x-5">
               {navigationItems.map((item) => (
                 <Link
                   key={item.title}
@@ -207,9 +201,9 @@ export default function Layout({ children }) {
               ))}
               {isAdmin && (
                 <Link
-                  to={createPageUrl("AdminDashboard")}
+                  to={adminLanding(user, IS_DEMO)}
                   className={`text-sm font-medium tracking-wide transition-colors duration-300 flex items-center gap-2 ${
-                    isActive(createPageUrl("AdminDashboard"))
+                    isActive(adminLanding(user, IS_DEMO))
                       ? 'text-[var(--accent)]'
                       : 'text-gray-200 hover:text-white'
                   }`}
@@ -238,8 +232,10 @@ export default function Layout({ children }) {
 
             {/* Mobile Menu Button */}
             <button
+              aria-label={mobileMenuOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={mobileMenuOpen}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
+              className="xl:hidden p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -248,7 +244,7 @@ export default function Layout({ children }) {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[var(--primary-dark)] border-t border-white/10">
+          <div className="xl:hidden bg-[var(--primary-dark)] border-t border-white/10">
             <nav className="px-4 py-4 space-y-3">
               {navigationItems.map((item) => (
                 <Link
@@ -267,10 +263,10 @@ export default function Layout({ children }) {
               ))}
               {isAdmin && (
                 <Link
-                  to={createPageUrl("AdminDashboard")}
+                  to={adminLanding(user, IS_DEMO)}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive(createPageUrl("AdminDashboard"))
+                    isActive(adminLanding(user, IS_DEMO))
                       ? 'bg-white/10 text-[var(--accent)]'
                       : 'text-gray-200 hover:bg-white/5'
                   }`}
@@ -337,6 +333,13 @@ export default function Layout({ children }) {
                     <span>{email}</span>
                   </a>
                 )}
+              </div>
+              <div className="mt-6 flex flex-wrap gap-4 text-sm">
+                {Object.entries(socialLinks).map(([name, url]) => url && (
+                  <a key={name} href={url} target="_blank" rel="noreferrer" className="text-[var(--accent-light)] hover:text-white transition-colors">
+                    {name[0].toUpperCase() + name.slice(1)}
+                  </a>
+                ))}
               </div>
             </div>
 

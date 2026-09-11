@@ -1,114 +1,44 @@
-import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { base44 } from "@/api/base44Client";
+import React, { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { base44 } from '@/api/base44Client';
+import { IS_DEMO } from '@/api/transport';
+import { adminLanding } from '@/api/permissions';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function Login() {
   const { loginWithCredentials, authError } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpMethod, setOtpMethod] = useState("sms");
-  const [humanCheck, setHumanCheck] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = location.state?.from || "/AdminDashboard";
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return;
-    if (!humanCheck) {
-      return;
-    }
+  async function submit(event) {
+    event.preventDefault();
     setLoading(true);
     try {
-      await loginWithCredentials({ email, password, otp, otpMethod, authApi: base44.auth });
-      navigate(redirectTo, { replace: true });
-    } catch {
-      // error handled in context state
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[var(--primary)] via-[var(--primary-dark)] to-[var(--primary-dark)] px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-[var(--primary)]">Admin / Super Login</h1>
-          <p className="text-gray-600">Enter verified email and password. OTP will be required if 2FA is enabled.</p>
-        </div>
-        <form className="space-y-4" onSubmit={handleLogin}>
-          <Input
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="radio"
-                name="otpMethod"
-                value="sms"
-                checked={otpMethod === "sms"}
-                onChange={() => setOtpMethod("sms")}
-              />
-              SMS
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="radio"
-                name="otpMethod"
-                value="email"
-                checked={otpMethod === "email"}
-                onChange={() => setOtpMethod("email")}
-              />
-              Email
-            </label>
-          </div>
-          <Input
-            type="text"
-            placeholder="OTP (only if 2FA enabled)"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-          />
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={humanCheck}
-              onChange={(e) => setHumanCheck(e.target.checked)}
-            />
-            I'm not a robot (simple check)
-          </label>
-          {authError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-              {authError}
-            </p>
-          )}
-          <Button
-            type="submit"
-            className="w-full bg-[var(--primary)] hover:bg-[var(--primary-dark)]"
-            disabled={loading}
-          >
-            {loading ? "Checking..." : "Login"}
-          </Button>
-        </form>
-        <p className="text-xs text-gray-500 text-center">
-          Only emails verified by an Admin can sign in. Admins can set passwords and promote users to Admin or Super User roles.
-        </p>
-      </div>
-    </div>
-  );
+      const user = await loginWithCredentials({ email, password, authApi: base44.auth });
+      const requested = location.state?.from;
+      const destination = user.role === 'admin' ? (requested || '/AdminDashboard') : adminLanding(user, IS_DEMO);
+      navigate(destination, { replace: true });
+    } catch { /* Error shown by context; never pretend login succeeded. */ }
+    finally { setLoading(false); }
+  }
+  return <main className="min-h-screen flex items-center justify-center bg-[#112037] p-5">
+    <section className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md space-y-6">
+      <Link to="/" className="text-sm text-slate-600">← Back to D16 Interior</Link>
+      <h1 className="text-3xl font-bold text-[#112037]">{IS_DEMO ? 'Local design preview' : 'Team sign in'}</h1>
+      <p className="text-slate-600">{IS_DEMO ? 'Preview the admin design with sample content. This is not production authentication. Do not enter real client data.' : 'Use your administrator-created account. Your identity and permissions are checked by the server.'}</p>
+      <form onSubmit={submit} className="space-y-4">
+        {!IS_DEMO && <>
+          <label className="block">Email<Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="block">Password<Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        </>}
+        {authError && <p role="alert" className="p-3 bg-red-50 text-red-800 rounded-lg">{authError}</p>}
+        <Button className="w-full bg-[#112037]" disabled={loading}>{loading ? 'Please wait…' : IS_DEMO ? 'Open sample admin preview' : 'Sign in'}</Button>
+      </form>
+      {!IS_DEMO && <p className="text-xs text-slate-500">Accounts requiring MFA remain locked until a real MFA provider is configured. No email or SMS delivery is simulated.</p>}
+    </section>
+  </main>;
 }

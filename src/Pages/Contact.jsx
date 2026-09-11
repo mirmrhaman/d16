@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useSearchParams } from 'react-router-dom';
+import { IS_DEMO } from '@/api/transport';
 import { base44 } from "@/api/base44Client";
 import { contactInfoClient } from "@/api/contactInfoClient";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -25,6 +27,8 @@ const countryCodes = [
 ];
 
 export default function Contact() {
+  const [searchParams] = useSearchParams();
+  const conceptTitle = searchParams.get('conceptTitle') || searchParams.get('serviceTitle') || '';
   const [countryCode, setCountryCode] = useState("+880");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [formData, setFormData] = useState({
@@ -34,7 +38,8 @@ export default function Contact() {
     project_type: '',
     location: '',
     budget: '',
-    message: ''
+    message: conceptTitle ? `I am interested in: ${conceptTitle}` : '',
+    preferred_date: ''
   });
 
   const [submitted, setSubmitted] = useState(false);
@@ -63,10 +68,10 @@ export default function Contact() {
         project_type: '',
         location: '',
         budget: '',
-        message: ''
+        message: '',
+        preferred_date: ''
       });
       setPhoneNumber('');
-      setTimeout(() => setSubmitted(false), 5000);
     }
   });
 
@@ -139,12 +144,15 @@ export default function Contact() {
                   </p>
 
                   {submitted && (
-                    <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
-                      Thank you! We'll get back to you shortly.
+                    <div role="status" className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
+                      Thank you! Your consultation request has been saved. Our team can now review it.
                     </div>
                   )}
 
                   <form onSubmit={handleSubmit} className="space-y-6">
+                    {IS_DEMO && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Preview only: this form cannot send requests yet. Please do not enter confidential information.</p>}
+                    {createMutation.error && <p role="alert" className="text-red-700">{createMutation.error.message}</p>}
+                    {conceptTitle && <p className="rounded-lg bg-slate-50 p-3 text-sm">Selected inspiration: <strong>{conceptTitle}</strong></p>}
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label htmlFor="full_name">Name *</Label>
@@ -198,7 +206,7 @@ export default function Contact() {
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label htmlFor="project_type">Project Type *</Label>
-                        <Select value={formData.project_type} onValueChange={(value) => setFormData({...formData, project_type: value})}>
+                        <Select id="project_type" required value={formData.project_type} onValueChange={(value) => setFormData({...formData, project_type: value})}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
@@ -233,6 +241,10 @@ export default function Contact() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="preferred_date">Preferred consultation date</Label>
+                      <Input id="preferred_date" type="date" value={formData.preferred_date} onChange={(e) => setFormData({ ...formData, preferred_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="message">Message</Label>
                       <Textarea
                         id="message"
@@ -246,7 +258,7 @@ export default function Contact() {
                     <Button 
                       type="submit" 
                       className="w-full bg-[var(--primary)] hover:bg-[var(--primary-dark)] py-6 text-lg"
-                      disabled={createMutation.isPending}
+                      disabled={createMutation.isPending || IS_DEMO}
                     >
                       {createMutation.isPending ? 'Submitting...' : 'Submit Request'}
                     </Button>
@@ -303,9 +315,7 @@ export default function Contact() {
                     We're located in the heart of Dhaka. Schedule a visit to our office to 
                     discuss your project in detail and explore our design portfolio.
                   </p>
-                  <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white hover:text-[var(--primary)]">
-                    Get Directions
-                  </Button>
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`} target="_blank" rel="noopener noreferrer" className="inline-block rounded-lg border border-white px-5 py-3 hover:bg-white hover:text-[var(--primary)]">Get Directions</a>
                 </CardContent>
               </Card>
             </motion.div>

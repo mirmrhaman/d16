@@ -20,10 +20,11 @@ function parseOptions(children) {
     }
   })
 
-  return { options, triggerProps }
+  const placeholder = React.Children.toArray(triggerProps.children).find((child) => child?.type?.displayName === 'SelectValue')?.props.placeholder;
+  return { options, triggerProps, placeholder }
 }
 
-export function Select({ value, defaultValue = '', onValueChange, className, children }) {
+export function Select({ value, defaultValue = '', onValueChange, className, children, ...props }) {
   const controlled = value !== undefined
   const [internal, setInternal] = useState(value ?? defaultValue)
 
@@ -36,25 +37,28 @@ export function Select({ value, defaultValue = '', onValueChange, className, chi
     onValueChange?.(val)
   }
 
-  const { options, triggerProps } = useMemo(() => parseOptions(children), [children])
+  const { options, triggerProps, placeholder } = useMemo(() => parseOptions(children), [children])
 
   useEffect(() => {
-    if (!controlled && !internal && options.length > 0) {
+    if (!controlled && !internal && !placeholder && options.length > 0) {
       setInternal(options[0].value)
     }
-  }, [controlled, internal, options])
+  }, [controlled, internal, options, placeholder])
 
   return (
     <div className={cn('relative w-full', className)}>
       <select
+        {...props}
+        id={props.id || triggerProps.id}
         className={cn(
           'w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2',
           triggerProps.className,
         )}
         value={internal}
         onChange={(e) => setValue(e.target.value)}
-        aria-label="Select"
+        aria-label={props['aria-label'] || triggerProps['aria-label'] || (props.id || triggerProps.id ? undefined : 'Select')}
       >
+        {placeholder && <option value="" disabled>{placeholder}</option>}
         {options.map((option) => (
           <option key={option.value ?? option.label} value={option.value}>
             {option.label}

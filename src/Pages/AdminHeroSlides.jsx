@@ -25,7 +25,7 @@ export default function AdminHeroSlides() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.HeroSlide.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['heroSlides']);
+      queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
       setEditingSlide(null);
     }
   });
@@ -33,14 +33,14 @@ export default function AdminHeroSlides() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.HeroSlide.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['heroSlides']);
+      queryClient.invalidateQueries({ queryKey: ['heroSlides'] });
       setEditingSlide(null);
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.HeroSlide.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['heroSlides'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['heroSlides'] })
   });
 
   const handleImageUpload = async (e) => {

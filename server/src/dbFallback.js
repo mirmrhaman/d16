@@ -14,4 +14,5 @@ export const isDbUnavailableError = (error) => {
   return /ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ENOTFOUND/i.test(message);
 };
 
-export const shouldUseLocalFallback = (error) => isDbUnavailableError(error);
+// A database outage must never be acknowledged as a successful mock write.
+export const shouldUseLocalFallback = () => false;

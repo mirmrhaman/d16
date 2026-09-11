@@ -19,7 +19,6 @@ export default function AdminLogo() {
   const [uploadError, setUploadError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [selectedFileMeta, setSelectedFileMeta] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
 
   const broadcastBrandingRefresh = () => {
@@ -38,7 +37,6 @@ export default function AdminLogo() {
   useEffect(() => {
     setLogoUrl(existingContact?.logo_url || "");
     setPreviewUrl(existingContact?.logo_url || "");
-    setSelectedFileMeta(null);
     setUploadError("");
     setSaveStatus("");
     setSaveError("");
@@ -88,26 +86,21 @@ export default function AdminLogo() {
     if (!file) return;
 
     const fileName = file.name.toLowerCase();
-    const allowedExtensions = [".png", ".jpg", ".jpeg", ".psd", ".webp", ".svg"];
+    const allowedExtensions = [".png", ".jpg", ".jpeg", ".webp"];
     const hasValidExtension = allowedExtensions.some((ext) => fileName.endsWith(ext));
 
-    if (!hasValidExtension) {
-      setUploadError("Only PNG, JPG, JPEG, WEBP, SVG, and PSD files are allowed.");
+    if (!hasValidExtension || file.size > 5 * 1024 * 1024) {
+      setUploadError("Use a PNG, JPG, JPEG, or WEBP image smaller than 5 MB. Export design files as an image first.");
       return;
     }
 
-    const isPsd = fileName.endsWith(".psd");
     setUploadError("");
     setSaveError("");
     setSaveStatus("");
-    setSelectedFileMeta({ name: file.name, isPsd });
-
-    if (!isPsd) {
-      if (previewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-      setPreviewUrl(URL.createObjectURL(file));
+    if (previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
     }
+    setPreviewUrl(URL.createObjectURL(file));
 
     setUploading(true);
     try {
@@ -220,7 +213,7 @@ export default function AdminLogo() {
                   <input
                     id="logo-file-upload"
                     type="file"
-                    accept=".png,.jpg,.jpeg,.webp,.svg,.psd,image/png,image/jpeg,image/webp,image/svg+xml,image/vnd.adobe.photoshop"
+                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={handleImageUpload}
                   />
@@ -230,24 +223,17 @@ export default function AdminLogo() {
                 {saveStatus && <p className="text-sm text-green-600">{saveStatus}</p>}
               </div>
 
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-sm font-medium text-gray-700 mb-3">Preview</p>
-                {selectedFileMeta?.isPsd ? (
-                  <div className="space-y-1 text-sm text-gray-600">
-                    <p>PSD selected: {selectedFileMeta.name}</p>
-                    <p>PSD preview may not render in browser, but the file is accepted and can be saved.</p>
-                  </div>
-                ) : (
+              <div className="rounded-lg border border-gray-200 bg-[var(--primary)] p-4">
+                <p className="text-sm font-medium text-white mb-3">Preview on the header background</p>
                   <img
                     src={previewSrc}
                     alt="Logo preview"
                     className="h-20 w-auto"
                   />
-                )}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button type="submit" className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] w-full sm:w-auto" disabled={isSaving}>
+                <Button type="submit" className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] w-full sm:w-auto" disabled={isSaving || uploading}>
                   <Save className="mr-2" size={18} />
                   {isSaving ? "Saving..." : "Save Logo"}
                 </Button>

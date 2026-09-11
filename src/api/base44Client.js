@@ -1,21 +1,14 @@
-const _sortData = (items, ordering) => {
-  if (!ordering) return [...items]
-  const descending = ordering.startsWith('-')
-  const key = descending ? ordering.slice(1) : ordering
-  return [...items].sort((a, b) => {
-    const aVal = a?.[key]
-    const bVal = b?.[key]
-    if (aVal === bVal) return 0
-    if (aVal === undefined) return 1
-    if (bVal === undefined) return -1
-    return aVal > bVal ? (descending ? -1 : 1) : descending ? 1 : -1
-  })
-}
+import { IS_DEMO, createApiEntity, requestJson } from './transport.js';
+import { LIVE_SERVICES, LIVE_CONCEPTS } from '../data/liveContent.js';
+import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../data/aboutContent.js';
+import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../data/siteAppearance.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
 // LocalStorage-based store for persistence
-const createStore = (initial = [], storageKey) => {
+const createStore = (initial = [], storageKey, migrateStoredData) => {
+  // Separate demo data from legacy browser edits; never replace those old keys.
+  storageKey = storageKey ? `${storageKey}_demo_v2` : undefined;
   let memoryData = [...initial];
 
   // Load from localStorage or use initial data
@@ -24,7 +17,9 @@ const createStore = (initial = [], storageKey) => {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         try {
-          return JSON.parse(stored);
+          const parsed = JSON.parse(stored);
+          if (!Array.isArray(parsed)) return [...initial];
+          return migrateStoredData ? migrateStoredData(parsed, initial) : parsed;
         } catch (e) {
           console.error("Error parsing stored data:", e);
         }
@@ -34,11 +29,6 @@ const createStore = (initial = [], storageKey) => {
   };
 
   let data = loadData();
-  let nextId = data.reduce((max, item) => {
-    const numericId = Number(item.id);
-    return Number.isFinite(numericId) ? Math.max(max, numericId) : max;
-  }, 0) + 1;
-
   const saveData = () => {
     if (storageKey && hasLocalStorage) {
       localStorage.setItem(storageKey, JSON.stringify(data));
@@ -66,7 +56,7 @@ const createStore = (initial = [], storageKey) => {
       data = loadData();
       const record = {
         ...payload,
-        id: nextId++,
+        id: crypto.randomUUID(),
         created_date: payload?.created_date || new Date().toISOString(),
       };
       data = [record, ...data];
@@ -75,13 +65,14 @@ const createStore = (initial = [], storageKey) => {
     },
     async update(id, updates) {
       data = loadData();
-      data = data.map((item) => (item.id === id ? { ...item, ...updates } : item));
+      if (!data.some((item) => String(item.id) === String(id))) throw new Error('Record not found.');
+      data = data.map((item) => (String(item.id) === String(id) ? { ...item, ...updates, id: item.id, updated_at: new Date().toISOString() } : item));
       saveData();
-      return data.find((item) => item.id === id);
+      return data.find((item) => String(item.id) === String(id));
     },
     async delete(id) {
       data = loadData();
-      data = data.filter((item) => item.id !== id);
+      data = data.filter((item) => String(item.id) !== String(id));
       saveData();
       return true;
     },
@@ -91,62 +82,35 @@ const createStore = (initial = [], storageKey) => {
 const heroSlidesStore = createStore([
   {
     id: 1,
-    title: 'Luxury Interior Design',
-    subtitle: 'Transforming spaces into extraordinary experiences',
+    title: 'Residence Interior Design',
+    subtitle: 'Crafting warm, stylish homes that reflect who you are',
     image: 'https://images.unsplash.com/photo-1616594039964-769c4e75b63d?w=1600&q=80',
     order: 1,
     active: true,
   },
   {
     id: 2,
-    title: 'Functional Elegance',
-    subtitle: 'Smart, stylish interiors tailored to your lifestyle',
+    title: 'Commercial Space Interior Design',
+    subtitle: 'Where brand identity meets modern interior excellence',
     image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=1600&q=80',
     order: 2,
     active: true,
   },
   {
     id: 3,
-    title: 'Signature Projects',
-    subtitle: 'Award-winning spaces that inspire and delight',
+    title: 'Curated Furniture & Decor',
+    subtitle: 'Furniture & Decor that Speaks Your Style',
     image: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1600&q=80',
     order: 3,
     active: true,
   },
-])
+], 'd16_hero_slides')
 
 const statsStore = createStore([
   { id: 1, label: 'Projects Completed', value: '120+', icon: 'Award', order: 1 },
   { id: 2, label: 'Happy Clients', value: '95%', icon: 'Users', order: 2 },
   { id: 3, label: 'Years Experience', value: '10+', icon: 'TrendingUp', order: 3 },
-])
-
-const servicesStore = createStore([
-  {
-    id: 1,
-    title: 'Residential Interiors',
-    description: 'Custom interior design for apartments, villas, and homes across Bangladesh.',
-    image: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200&q=80',
-    features: ['Space planning', 'Material selection', 'Lighting design'],
-    order: 1,
-  },
-  {
-    id: 2,
-    title: 'Commercial Spaces',
-    description: 'Brand-forward office, retail, and hospitality interiors that elevate experiences.',
-    image: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1200&q=80',
-    features: ['Brand alignment', 'Furniture planning', 'Acoustic solutions'],
-    order: 2,
-  },
-  {
-    id: 3,
-    title: 'Renovations',
-    description: 'Turn-key renovation services with meticulous project management.',
-    image: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200&q=80',
-    features: ['Concept to completion', 'Material sourcing', 'On-site supervision'],
-    order: 3,
-  },
-])
+], 'd16_stats')
 
 const projectsStore = createStore([
   {
@@ -182,7 +146,7 @@ const projectsStore = createStore([
     description: 'Green-filled café with natural textures and layered lighting.',
     featured_image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1200&q=80',
   },
-])
+], 'd16_projects')
 
 const blogPostsStore = createStore([
   {
@@ -203,14 +167,14 @@ const blogPostsStore = createStore([
     author: 'D16 Studio',
     published_date: '2024-11-20T00:00:00Z',
   },
-])
+], 'd16_blog_posts')
 
 const consultationsStore = createStore([
   {
     id: 1,
-    full_name: 'Aisha Rahman',
-    email: 'aisha@example.com',
-    phone: '+880 1711-000000',
+    full_name: 'Sample Client (Demo)',
+    email: 'sample-client@example.invalid',
+    phone: '0000000000',
     project_type: 'Residential',
     location: 'Dhaka',
     budget: '$30,000 - $50,000',
@@ -229,17 +193,20 @@ const contactInfoStore = createStore([
     working_hours: 'Mon - Sat: 9:00 AM - 6:00 PM',
     locations: ['Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi'],
     logo_url: 'https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690395669c778d5c32d51682/5ac5acb53_image.png',
-    theme_color: '#1e3a5f',
+    theme_color: '#112037',
   },
 ], 'd16_contact_info')
 
 const accessControlStore = createStore([
   {
     id: 1,
-    allowed_sections: ['HeroSlides', 'Stats', 'Services', 'Projects', 'Blog', 'Gallery'],
+    allowed_sections: ['HeroSlides', 'Stats', 'Services', 'Projects', 'Blog', 'Gallery', 'PicYourConcept', 'About'],
   },
 ])
 
+// Furniture concepts shown on the dedicated "Pic Your Concept" section.
+// They use the same local persistence model as the rest of the content so an
+// admin can safely add, edit, or remove items without needing a remote API.
 // Gallery Videos Store
 const galleryVideosStore = createStore([
   {
@@ -328,52 +295,19 @@ const galleryConceptsStore = createStore([
   }
 ], 'd16_gallery_concepts')
 
-const usersStore = createStore([
-  { id: 1, email: 'admin@example.com', name: 'Primary Admin', role: 'admin', verified: true, password: 'admin123', phone: '+8801711000001', two_factor_enabled: true, two_factor_code: '123456' },
-  { id: 2, email: 'super@example.com', name: 'Content Editor', role: 'super', verified: true, password: 'super123', phone: '+8801711000002', two_factor_enabled: false, two_factor_code: '123456' },
-  { id: 3, email: 'user@example.com', name: 'Viewer', role: 'viewer', verified: false, password: 'changeme123', phone: '+8801711000003', two_factor_enabled: false, two_factor_code: '123456' },
-])
+const servicesStore = createStore(LIVE_SERVICES, 'd16_services');
+const aboutPageStore = createStore([{ ...DEFAULT_ABOUT, id: ABOUT_PAGE_ID }], 'd16_about_page');
+const dashboardLayoutStore = createStore([{ ...DEFAULT_DASHBOARD_LAYOUT, id: DASHBOARD_LAYOUT_ID }], 'd16_dashboard_layout');
+const websiteIconsStore = createStore([{ ...DEFAULT_WEBSITE_ICONS, id: WEBSITE_ICONS_ID }], 'd16_website_icons');
+const picYourConceptStore = createStore(LIVE_CONCEPTS, 'd16_pic_your_concept');
+const usersStore = createStore([], 'd16_demo_users');
+const demoUser = { id: 'demo-preview', name: 'Local preview', role: 'admin', permissions: [] };
 
-const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000))
-
-export const base44 = {
+const demoClient = {
   auth: {
-    async login({ email, password, otp, otpMethod = 'sms' }) {
-      const normalized = (email || '').trim().toLowerCase()
-      const user = (await usersStore.list()).find((u) => u.email.toLowerCase() === normalized)
-      if (!user) {
-          throw new Error('User not found. Ask an admin to invite you.')
-      }
-      if (!user.verified) {
-        throw new Error('Email not verified yet. Please verify before logging in.')
-      }
-      if (!password || password !== user.password) {
-        throw new Error('Invalid email or password.')
-      }
-      if (user.two_factor_enabled) {
-        if (!otp) {
-          const code = generateOtp()
-          await usersStore.update(user.id, { two_factor_code: code })
-          if (otpMethod === 'email') {
-            await base44.integrations.Core.SendEmail({
-              to: user.email,
-              subject: 'Your verification code',
-              body: `Your verification code is ${code}`,
-            })
-            throw new Error('OTP sent to your email. Please enter the code to continue.')
-          }
-          await base44.integrations.Core.SendSms({
-            to: user.phone,
-            message: `Your verification code is ${code}`,
-          })
-          throw new Error('OTP sent to your phone. Please enter the code to continue.')
-        }
-        if (otp !== user.two_factor_code) {
-          throw new Error('Invalid two-factor code.')
-        }
-      }
-      return user
-    },
+    async login() { sessionStorage.setItem('d16_demo_session', 'preview'); return demoUser; },
+    async me() { return sessionStorage.getItem('d16_demo_session') ? demoUser : null; },
+    async logout() { sessionStorage.removeItem('d16_demo_session'); },
   },
   integrations: {
     Core: {
@@ -397,17 +331,18 @@ export const base44 = {
         const fileLabel = file?.name ? encodeURIComponent(file.name) : 'uploaded-file'
         return { file_url: `https://via.placeholder.com/1200x800?text=${fileLabel}` }
       },
-      async SendSms({ to, message }) {
-        console.log(`SMS to ${to}: ${message}`)
-        return { sent: true }
+      async SendSms() {
+        throw new Error('SMS delivery is not configured. No message was sent.');
       },
-      async SendEmail({ to, subject, body }) {
-        console.log(`Email to ${to}: ${subject}\n${body}`)
-        return { sent: true }
+      async SendEmail() {
+        throw new Error('Email delivery is not configured. No message was sent.');
       },
     },
   },
   entities: {
+    DashboardLayout: dashboardLayoutStore,
+    WebsiteIcons: websiteIconsStore,
+    AboutPage: aboutPageStore,
     HeroSlide: heroSlidesStore,
     Stats: statsStore,
     Service: servicesStore,
@@ -419,5 +354,36 @@ export const base44 = {
     User: usersStore,
     GalleryVideo: galleryVideosStore,
     GalleryConcept: galleryConceptsStore,
+    PicYourConcept: picYourConceptStore,
   },
 }
+
+const endpoints = { DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
+const realClient = {
+  entities: { ...Object.fromEntries(Object.entries(endpoints).map(([name, path]) => [name, createApiEntity(path)])), AccessControl: createApiEntity('access-control') },
+  auth: {
+    async login(credentials) { const data = await requestJson('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }); return data.user ?? data.data ?? data; },
+    async me() { try { const data = await requestJson('/auth/me'); return data.user ?? data.data ?? data; } catch (error) { if (error.status === 401) return null; throw error; } },
+    async logout() { await requestJson('/auth/logout', { method: 'POST', body: '{}' }); },
+  },
+  integrations: { Core: {
+    ...demoClient.integrations.Core,
+    async UploadFile({ file }) {
+      if (!file || file.size > 5 * 1024 * 1024) throw new Error('Choose an image smaller than 5 MB.');
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      let binary = '';
+      for (const byte of buffer) binary += String.fromCharCode(byte);
+      return requestJson('/uploads', { method: 'POST', body: JSON.stringify({ filename: file.name, content_type: file.type, data_base64: btoa(binary) }) });
+    },
+  } },
+};
+
+// Personal information and credentials must never be persisted to browser storage.
+demoClient.entities.Consultation = {
+  async list() { return consultationsStore.list(); },
+  async create() { throw new Error('This is a local preview. Connect the QA API before sending personal information; nothing was submitted.'); },
+  async update() { throw new Error('Consultation updates require the QA API.'); },
+};
+demoClient.entities.User = { async list() { return []; }, async create() { throw new Error('Account management requires the QA API.'); }, async update() { throw new Error('Account management requires the QA API.'); } };
+demoClient.entities.AuditLog = { async list() { return []; } };
+export const base44 = IS_DEMO ? demoClient : realClient;

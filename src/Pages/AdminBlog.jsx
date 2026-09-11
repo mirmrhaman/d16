@@ -26,7 +26,7 @@ export default function AdminBlog() {
   const createMutation = useMutation({
     mutationFn: (data) => blogPostsClient.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['blogPosts']);
+      queryClient.invalidateQueries({ queryKey: ['blogPosts'] });
       setEditingPost(null);
     }
   });
@@ -34,14 +34,14 @@ export default function AdminBlog() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => blogPostsClient.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['blogPosts']);
+      queryClient.invalidateQueries({ queryKey: ['blogPosts'] });
       setEditingPost(null);
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => blogPostsClient.delete(id),
-    onSuccess: () => queryClient.invalidateQueries(['blogPosts'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['blogPosts'] })
   });
 
   const handleImageUpload = async (e) => {
@@ -171,6 +171,7 @@ export default function AdminBlog() {
                       value={editingPost.published_date}
                       onChange={(e) => setEditingPost({ ...editingPost, published_date: e.target.value })}
                     />
+                    <p className="text-xs text-gray-500">Leave blank for a draft. A future date schedules publication.</p>
                   </div>
                 </div>
 

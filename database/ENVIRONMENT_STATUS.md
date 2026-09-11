@@ -1,25 +1,13 @@
-# Environment Status
+# Environment status — 2026-09-08
 
-## Active now
-- Environment: QA
-- Database: dinterio_d16_qa
-- Purpose: all app integration and validation work
+| Environment | Actual status |
+|---|---|
+| Local visual preview | Explicit demo mode; sample public content; real submissions/account management disabled |
+| Isolated local MariaDB 10.11 | Schema, migrations, encryption, authentication, permissions and audit integration verified; disposable test data removed |
+| Hosted QA: dinterio_d16_qa | Intended next target; not updated or verified by this synchronization task |
+| Hosted production: dinterio_d16_prod | Untouched; runtime production guard remains enabled |
+| Published Netlify website | Reference only; not redeployed |
 
-## Deferred
-- Environment: Production
-- Status: committed in repository, not active
-- Activation: later, after explicit rollout approval
+Current setup: [QA_SETUP.md](QA_SETUP.md). Main handover: [../START_HERE.md](../START_HERE.md).
 
-## Files
-- Active schema and seed flow:
-  - database/schema.mysql.sql
-  - database/seed.qa.synthetic.mysql.sql
-  - database/QA_SETUP.md
-  - database/.env.qa.example
-- Deferred production references:
-  - database/.env.server.example
-
-## Guardrails
-- Never use production credentials in active local or QA testing.
-- Keep QA and production encryption keys separate.
-- Rotate credentials if ever exposed in messages or logs.
+An existing database/user in cPanel does not prove connectivity or production readiness. Earlier Mac SSH/3306 checks were blocked; hosting support must confirm the supported access method. No new connectivity result is implied here.

@@ -1,12 +1,12 @@
-# React + Vite
+# D16 Interior
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the synchronized D16 application: React frontend and Node.js/MySQL backend.
 
-Currently, two official plugins are available:
+Start with [CI/CD and branch guide](docs/CICD.md) for the `qa` / `production` process, approval and deployment boundaries. Follow [QA setup](database/QA_SETUP.md) for real database integration.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+`npm run dev` opens the local visual preview. It does not connect to QA or production.
+`npm run dev:full` starts the real QA API and frontend, after server-side configuration.
 
-## Expanding the ESLint configuration
+Install dependencies with `npm ci`. Run `npm test` and `npm run lint`; database integration tests use a disposable local Docker container through `npm run test:database`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The live Netlify website was used as a visual/content reference. Pushing these branches currently runs checks and creates versioned candidate packages; it does not deploy DianaHost. GitHub Pages preview publishing is opt-in. Never upload private environment files or database backups.

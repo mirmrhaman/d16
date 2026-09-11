@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${1:-$SCRIPT_DIR/.env.qa.local}"
+if [[ "${D16_QA_ENV_LOADED:-}" != "1" ]]; then
+  exec node "$SCRIPT_DIR/run-qa-env.mjs" "$ENV_FILE" bash "$0" "$ENV_FILE"
+fi
 
 echo "[qa-db-verify] Starting QA schema/seed verification"
 
@@ -20,15 +23,7 @@ if ! command -v mysql >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a
-  source "$ENV_FILE"
-  set +a
-  echo "[qa-db-verify] Loaded environment from $ENV_FILE"
-else
-  echo "[qa-db-verify] Env file not found at $ENV_FILE; using current shell environment"
-fi
+echo "[qa-db-verify] Environment loaded safely"
 
 required_vars=(DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD)
 missing=()
@@ -75,6 +70,8 @@ required_tables=(
   organization_profile organization_locations hero_slides
   stats services service_features projects project_gallery_images
   blog_posts gallery_videos gallery_concepts gallery_concept_features audit_logs
+  consultation_requests user_role_assignments mfa_methods mfa_challenges auth_sessions
+  app_content app_private_details app_schema_migrations
 )
 
 missing_tables=()

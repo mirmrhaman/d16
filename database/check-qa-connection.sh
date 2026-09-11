@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ENV_FILE="${1:-$SCRIPT_DIR/.env.qa.local}"
+if [[ "${D16_QA_ENV_LOADED:-}" != "1" ]]; then
+  exec node "$SCRIPT_DIR/run-qa-env.mjs" "$ENV_FILE" bash "$0" "$ENV_FILE"
+fi
 
 echo "[qa-db-check] Starting QA database connectivity check"
 
@@ -21,15 +24,7 @@ if ! command -v mysql >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a
-  source "$ENV_FILE"
-  set +a
-  echo "[qa-db-check] Loaded environment from $ENV_FILE"
-else
-  echo "[qa-db-check] Env file not found at $ENV_FILE; using current shell environment"
-fi
+echo "[qa-db-check] Environment loaded safely"
 
 required_vars=(DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD)
 missing=()
@@ -64,7 +59,7 @@ fi
 
 query="SELECT DATABASE() AS db_name, UTC_TIMESTAMP() AS utc_now, 1 AS ok;"
 
-if MYSQL_PWD="$DB_PASSWORD" mysql --protocol=TCP -h "$mysql_host" -P "$DB_PORT" -u "$DB_USER" -D "$DB_NAME" -e "$query"; then
+if MYSQL_PWD="$DB_PASSWORD" mysql --connect-timeout=10 --protocol=TCP -h "$mysql_host" -P "$DB_PORT" -u "$DB_USER" -D "$DB_NAME" -e "$query"; then
   echo "[qa-db-check] SUCCESS: QA database connection is healthy"
 else
   echo "[qa-db-check] ERROR: Connection failed (host=$mysql_host port=$DB_PORT db=$DB_NAME)"

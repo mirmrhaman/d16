@@ -23,6 +23,8 @@ import Services from "./Pages/Services";
 import Portfolio from "./Pages/Portfolio";
 import Gallery from "./Pages/Gallery";
 import About from "./Pages/About";
+import AdminAbout from "./Pages/AdminAbout";
+import AdminIcons from "./Pages/AdminIcons";
 import Blog from "./Pages/Blog";
 import Contact from "./Pages/Contact";
 import Login from "./Pages/Login";
@@ -39,17 +41,32 @@ import AdminTheme from "./Pages/AdminTheme";
 import AdminAccessControl from "./Pages/AdminAccessControl";
 import AdminUsers from "./Pages/AdminUsers";
 import AdminGallery from "./Pages/AdminGallery";
+import PicYourConcept from "./Pages/PicYourConcept";
+import PicYourConceptDetail from "./Pages/PicYourConceptDetail";
+import ServiceDetail from "./Pages/ServiceDetail";
+import AdminPicYourConcept from "./Pages/AdminPicYourConcept";
+import AdminLocations from "./Pages/AdminLocations";
+import AdminSocialMedia from "./Pages/AdminSocialMedia";
 import RequireAuth from "./components/RequireAuth";
+import AdminHistory from './Pages/AdminHistory';
+import BlogDetail from './Pages/BlogDetail';
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/AdminHistory" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminHistory /></Layout></RequireAuth>} />
       <Route path="/" element={<Layout><Home /></Layout>} />
       <Route path="/Services" element={<Layout><Services /></Layout>} />
+      <Route path="/Services/:serviceSlug" element={<Layout><ServiceDetail /></Layout>} />
       <Route path="/Portfolio" element={<Layout><Portfolio /></Layout>} />
+      <Route path="/PicYourConcept" element={<Layout><PicYourConcept /></Layout>} />
+      <Route path="/PicYourConcept/:conceptSlug" element={<Layout><PicYourConceptDetail /></Layout>} />
       <Route path="/Gallery" element={<Layout><Gallery /></Layout>} />
       <Route path="/About" element={<Layout><About /></Layout>} />
+      <Route path="/AdminAbout" element={<RequireAuth allowedRoles={['admin', 'super']} featureKey="About"><Layout><AdminAbout /></Layout></RequireAuth>} />
+      <Route path="/AdminIcons" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminIcons /></Layout></RequireAuth>} />
       <Route path="/Blog" element={<Layout><Blog /></Layout>} />
+      <Route path="/Blog/:postId" element={<Layout><BlogDetail /></Layout>} />
       <Route path="/Contact" element={<Layout><Contact /></Layout>} />
       <Route path="/login" element={<Login />} />
 
@@ -157,6 +174,16 @@ export default function App() {
           </RequireAuth>
         }
       />
+      <Route
+        path="/AdminPicYourConcept"
+        element={
+          <RequireAuth allowedRoles={['admin', 'super']} featureKey="PicYourConcept">
+            <Layout><AdminPicYourConcept /></Layout>
+          </RequireAuth>
+        }
+      />
+      <Route path="/AdminLocations" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminLocations /></Layout></RequireAuth>} />
+      <Route path="/AdminSocialMedia" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminSocialMedia /></Layout></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

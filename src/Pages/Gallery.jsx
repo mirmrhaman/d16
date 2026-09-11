@@ -1,15 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, Video, Palette, ArrowRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 export default function Gallery() {
   const [selectedConcept, setSelectedConcept] = useState(null);
-  const [showThankYou, setShowThankYou] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const navigate = useNavigate();
+  const dialogRef = useRef(null);
 
   // Fetch videos from base44
   const { data: videos = [] } = useQuery({
@@ -28,13 +30,8 @@ export default function Gallery() {
   };
 
   const handleSubmitConcept = () => {
-    if (selectedConcept) {
-      setShowThankYou(true);
-      setTimeout(() => {
-        setShowThankYou(false);
-        setSelectedConcept(null);
-      }, 5000);
-    }
+    const concept = concepts.find((item) => item.id === selectedConcept);
+    if (concept) navigate(`${createPageUrl("Contact")}?${new URLSearchParams({ concept: String(concept.id), conceptTitle: concept.title })}`);
   };
 
   const handleVideoClick = (video) => {
@@ -44,6 +41,26 @@ export default function Gallery() {
   const closeVideoModal = () => {
     setSelectedVideo(null);
   };
+
+  useEffect(() => {
+    if (!selectedVideo) return;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector("button")?.focus();
+    const dismiss = (event) => {
+      if (event.key === "Escape") setSelectedVideo(null);
+      if (event.key === "Tab") {
+        const elements = [...(dialogRef.current?.querySelectorAll("button, iframe, video[controls], a[href], [tabindex='0']") || [])];
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    window.addEventListener("keydown", dismiss);
+    return () => { window.removeEventListener("keydown", dismiss); document.body.style.overflow = previousOverflow; previousFocus?.focus?.(); };
+  }, [selectedVideo]);
 
   // Helper to check if URL is YouTube
   const isYouTubeUrl = (url) => {
@@ -81,10 +98,16 @@ export default function Gallery() {
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
               className="relative w-full max-w-4xl"
+              role="dialog"
+              ref={dialogRef}
+              aria-modal="true"
+              aria-label={selectedVideo.title}
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={closeVideoModal}
+                type="button"
+                aria-label="Close video"
                 className="absolute -top-10 right-0 text-white hover:text-gray-300"
               >
                 <X size={32} />
@@ -93,6 +116,7 @@ export default function Gallery() {
                 {selectedVideo.video_url ? (
                   isYouTubeUrl(selectedVideo.video_url) ? (
                     <iframe
+                      title={selectedVideo.title}
                       src={getYouTubeEmbedUrl(selectedVideo.video_url)}
                       className="w-full h-full"
                       frameBorder="0"
@@ -170,6 +194,10 @@ export default function Gallery() {
                 viewport={{ once: true }}
                 className="group cursor-pointer"
                 onClick={() => handleVideoClick(video)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Play ${video.title}`}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleVideoClick(video); } }}
               >
                 <div className="relative rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2">
                   <div className="relative h-48 overflow-hidden">
@@ -218,19 +246,7 @@ export default function Gallery() {
             </p>
           </motion.div>
 
-          {showThankYou ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center py-12 bg-white rounded-2xl shadow-lg"
-            >
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Check className="text-green-600" size={40} />
-              </div>
-              <h3 className="text-2xl font-bold text-[var(--primary)] mb-2">Thank You!</h3>
-              <p className="text-gray-600">Our team will contact you shortly to discuss your chosen concept.</p>
-            </motion.div>
-          ) : (
+          {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {concepts.map((concept, index) => (
@@ -246,6 +262,11 @@ export default function Gallery() {
                         : 'hover:shadow-2xl hover:-translate-y-2'
                     }`}
                     onClick={() => handleConceptSelect(concept.id)}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selectedConcept === concept.id}
+                    aria-label={`Select ${concept.title}`}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleConceptSelect(concept.id); } }}
                   >
                     <div className="relative h-48">
                       <img 
@@ -266,7 +287,7 @@ export default function Gallery() {
                     </div>
                     <div className="p-4 bg-white">
                       <ul className="space-y-2">
-                        {concept.features.map((feature, idx) => (
+                        {(concept.features || []).map((feature, idx) => (
                           <li key={idx} className="flex items-center text-sm text-gray-600">
                             <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full mr-2"></span>
                             {feature}
@@ -288,7 +309,7 @@ export default function Gallery() {
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  Submit Your Choice
+                  Continue with This Concept
                   <ArrowRight className="ml-2" size={20} />
                 </Button>
                 {!selectedConcept && (
@@ -296,7 +317,7 @@ export default function Gallery() {
                 )}
               </div>
             </>
-          )}
+          }
         </div>
       </section>
 
@@ -309,7 +330,7 @@ export default function Gallery() {
           <p className="text-xl mb-8 text-gray-200">
             Contact us today for a free consultation and let's bring your vision to life
           </p>
-          <Button size="lg" className="bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white font-semibold px-8 py-6 text-lg">
+          <Button size="lg" onClick={() => navigate(createPageUrl("Contact"))} className="bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white font-semibold px-8 py-6 text-lg">
             Get Started
           </Button>
         </div>
@@ -317,4 +338,3 @@ export default function Gallery() {
     </div>
   );
 }
-

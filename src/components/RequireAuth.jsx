@@ -1,16 +1,12 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { IS_DEMO } from '@/api/transport';
+import { canEditSection, adminLanding } from '@/api/permissions';
 import { useAuth } from "@/context/AuthContext";
 
 export default function RequireAuth({ allowedRoles = [], featureKey, children }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const location = useLocation();
-  const { data: accessControl = [], isLoading } = useQuery({
-    queryKey: ['accessControl'],
-    queryFn: () => base44.entities.AccessControl.list()
-  });
 
   if (isLoading) {
     return (
@@ -28,11 +24,8 @@ export default function RequireAuth({ allowedRoles = [], featureKey, children })
     return <Navigate to="/" replace />;
   }
 
-  if (featureKey && user.role === 'super') {
-    const allowed = accessControl[0]?.allowed_sections || [];
-    if (!allowed.includes(featureKey)) {
-      return <Navigate to="/" replace />;
-    }
+  if (featureKey && !canEditSection(user, featureKey, IS_DEMO)) {
+    return <Navigate to={adminLanding(user, IS_DEMO)} replace />;
   }
 
   return children;

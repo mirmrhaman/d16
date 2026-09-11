@@ -14,11 +14,14 @@ const sections = [
   { key: "Services", label: "Services" },
   { key: "Projects", label: "Projects" },
   { key: "Blog", label: "Blog" },
+  { key: "Gallery", label: "Gallery" },
+  { key: "PicYourConcept", label: "Pic Your Concept" },
+  { key: "About", label: "About Us, Mission, Vision & Team" },
 ];
 
 export default function AdminAccessControl() {
   const queryClient = useQueryClient();
-  const { data: access = [], isLoading } = useQuery({
+  const { data: access = [], isLoading, error } = useQuery({
     queryKey: ['accessControl'],
     queryFn: () => base44.entities.AccessControl.list()
   });
@@ -33,7 +36,7 @@ export default function AdminAccessControl() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.AccessControl.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries(['accessControl'])
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['accessControl'] })
   });
 
   const toggleSection = (key) => {
@@ -50,6 +53,7 @@ export default function AdminAccessControl() {
     });
   };
 
+  if (error) return <p role="alert" className="p-8 text-red-700">{error.message}</p>;
   if (isLoading || !record) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -84,6 +88,8 @@ export default function AdminAccessControl() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {updateMutation.error && <p role="alert" className="text-red-700">Permissions were not saved: {updateMutation.error.message}</p>}
+            {updateMutation.isSuccess && <p role="status" className="text-green-800">Permissions saved.</p>}
             {sections.map((section) => (
               <label
                 key={section.key}
@@ -105,10 +111,10 @@ export default function AdminAccessControl() {
             <Button
               onClick={handleSave}
               className="bg-[var(--primary)] hover:bg-[var(--primary-dark)] w-full sm:w-auto"
-              disabled={updateMutation.isLoading}
+              disabled={updateMutation.isPending}
             >
               <Save className="mr-2" size={18} />
-              {updateMutation.isLoading ? 'Saving...' : 'Save Permissions'}
+              {updateMutation.isPending ? 'Saving...' : 'Save Permissions'}
             </Button>
           </CardContent>
         </Card>

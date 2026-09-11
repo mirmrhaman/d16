@@ -1,127 +1,78 @@
-# QA Database Setup (cPanel MySQL/MariaDB)
+# QA setup — synchronized project
 
-This repository is currently configured for QA-first execution.
-Use only the QA database in all active testing and integration steps.
-Production schema files remain committed for later rollout, but are not active now.
+Do not apply these steps to production. The API deliberately permits only `dinterio_d16_qa` and rejects `NODE_ENV=production`.
 
-Use this order for an idempotent QA bootstrap.
+## 1. Hosting prerequisites
 
-## 1) Apply schema
+Confirm the hosting plan can run this Node.js/Express API with a persistent upload directory. A static Netlify upload alone cannot run the current backend.
 
-Option A: phpMyAdmin
-- Open QA database dinterio_d16_qa
-- Import database/schema.mysql.sql
+Use same-origin HTTPS routing: the browser calls `/api`, which is routed to the Node process. Keep MySQL private. On the hosting server `DB_HOST=localhost` means that server; on a Mac it means the Mac. Use a provider-approved SSH tunnel or verified TLS database connection if running the API elsewhere. SSH may use a provider-specific port; do not assume port 22 is enabled.
 
-Option B: CLI
-```bash
-mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < database/schema.mysql.sql
-```
+Cross-site cookie authentication is intentionally not enabled. A separate API hostname must be same-site and correctly configured, or exposed through a reviewed same-origin reverse proxy.
 
-## 2) Apply synthetic QA seed
+## 2. Back up QA, then prepare schema
 
-```bash
-mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < database/seed.qa.synthetic.mysql.sql
-```
+Export the existing QA database first. In phpMyAdmin, explicitly select `dinterio_d16_qa`.
 
-## 3) Sanity checks
+For an EMPTY QA database only, import `database/schema.mysql.sql`. Existing installations already have the native schema; do not rebuild tables. MySQL/MariaDB DDL is not one atomic rollback operation, so take a backup even for additive migrations.
 
-```sql
-SELECT COUNT(*) AS roles_count FROM roles;
-SELECT COUNT(*) AS permissions_count FROM permissions;
-SELECT COUNT(*) AS services_count FROM services;
-SELECT COUNT(*) AS projects_count FROM projects;
-SELECT COUNT(*) AS blog_count FROM blog_posts;
-SELECT COUNT(*) AS qa_org_count FROM organization_profile;
-```
+Apply, in this order:
 
-Quick connectivity check command:
-```bash
-npm run db:qa:check
-```
+1. `database/migrations/001_secure_content.sql`
+2. `database/migrations/002_section_permissions.sql`
+3. `database/migrations/003_about_page.sql`
+4. `database/migrations/004_dashboard_icons.sql`
 
-macOS helper (install mysql client and run connectivity check):
-```bash
-npm run db:qa:prepare-macos
-```
+The migrations retain native tables and seed richer public CMS content without overwriting existing app-content rows. The second and third migrations do not restore revoked section permissions on a sequential rerun. The third migration adds the About page and its section permission; its sample team profiles need client approval or replacement in Admin About before release. Avoid concurrent migration runners.
 
-Full schema + synthetic seed verification:
-```bash
-npm run db:qa:verify
-```
+Optional `seed.qa.synthetic.mysql.sql` is for a fresh disposable test database, BEFORE migrations. It contains placeholder images and is not real business content. Do not import it over a populated QA site merely to make row-count checks pass.
 
-When DB host is localhost on cPanel, run through SSH tunnel from macOS:
-```bash
-npm run db:qa:tunnel-check
-npm run db:qa:tunnel-verify
-```
+Migration 004 adds separate dashboard-layout and website-icon settings without overwriting saved values. Dashboard layout reads and writes require an administrator. Public pages can read website icons; only administrators can change them. Layout and icon updates require the loaded record version and are audited. Custom icons use the same persistent image upload configuration as other public photos.
 
-Optional custom env file path:
-```bash
-bash database/check-qa-connection.sh database/.env.qa.local
-bash database/check-qa-schema-seed.sh database/.env.qa.local
-```
+## 3. Configure server-only secrets
 
-## 4) Security requirements
-- Keep production and QA credentials different.
-- Use QA-only encryption keys.
-- Never commit real passwords, tokens, or keys.
-- Rotate credentials immediately if they were shared in messages, logs, or screenshots.
+Create or update `database/.env.qa.local` from `database/.env.qa.example` privately. Existing local credentials were not changed by this task.
 
-## 5) Active Environment Policy
-- Active environment now: QA only.
-- Use DB_NAME=dinterio_d16_qa and QA credentials only in runtime.
-- Do not point app runtime to production until explicit release approval.
-- Keep production SQL files committed for future deployment.
+Required: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, APP_ENCRYPTION_KEY_BASE64, APP_HMAC_KEY_BASE64.
 
-## 6) Notes
-- This QA seed intentionally avoids real personal data.
-- Confidential *_ciphertext fields are left for app-driven encrypted test inserts.
-- If QA DB host is `localhost` on cPanel, it is local to the cPanel server, not your laptop.
-- From local macOS, use one of these approaches:
-	- Run verification commands on cPanel terminal/SSH session directly.
-	- Or create an SSH tunnel and point DB_HOST to 127.0.0.1 with tunneled local port.
-- For tunnel mode, set these in your local env file:
-	- QA_SSH_HOST, QA_SSH_USER, QA_SSH_PORT
-	- QA_REMOTE_DB_HOST, QA_REMOTE_DB_PORT, QA_LOCAL_FORWARD_PORT
+The two encryption/lookup keys must be DIFFERENT cryptographically random 32-byte values encoded in base64. Generate and store them in your approved secret store, never in chat, browser code, SQL seeds, Git, or VITE_* variables. Preserve encrypted backups of the keys separately from database backups. Changing/deleting the key without a migration makes stored confidential data unreadable. KMS integration and key rotation remain release prerequisites, not completed features.
 
-## 7) Troubleshooting (Local to cPanel)
-- If `npm run db:qa:tunnel-check` shows `ssh: connect to host ... port 22: Connection refused`, SSH is not reachable from your network.
-- Enable SSH access in cPanel hosting settings (or ask hosting support to allow SSH on port 22 for your account/IP).
-- If SSH cannot be enabled, run checks inside cPanel Terminal instead:
-```bash
-npm run db:qa:check
-npm run db:qa:verify
-```
-- If direct MySQL access from local macOS is required, hosting support must allow remote MySQL access and your client IP.
+For HTTPS QA set `D16_SECURE_COOKIES=true`. Set `D16_ALLOWED_ORIGINS` to exact trusted origins without paths. Keep `D16_BIND_HOST=127.0.0.1` behind a reverse proxy. Remote database connections require verified TLS; use DB_SSL_CA_FILE if your provider requires its CA. TLS certificate verification is never disabled.
 
-## 8) API Backend Validation (Local)
-- Start API server (QA mode only):
-```bash
-npm run dev:api
-```
-- Check API health:
-```bash
-curl http://localhost:8787/api/health
-```
-- Expected success response:
-```json
-{"ok":true,"service":"d16-api"}
-```
+Persistent uploads need an absolute `D16_UPLOAD_DIR` outside your source/deployment folder and an HTTPS `D16_PUBLIC_UPLOAD_BASE_URL` pointing to its served public path. Only PNG/JPEG/WebP images up to 5 MB are supported. Use trusted hosted URLs for videos; video-file upload is not implemented.
 
-If you get:
-```json
-{"ok":false,"error":"Database connection failed"}
-```
-then the API is running but cannot reach MySQL.
+## 4. Initialize real access and public catalogue
 
-Common causes:
-- DB_HOST is localhost but no local MySQL server is running.
-- SSH tunnel is not established.
-- SSH to hosting is blocked (for example: connection refused on port 22).
+After migrations and keys are configured, run `npm run qa:bootstrap-admin` interactively. It prompts for the first administrator's email, display name and hidden password (12+ characters). No default account/password exists. The command refuses if an administrator already exists; it does not send an invitation.
 
-Recommended local settings for tunnel mode:
-- DB_HOST=127.0.0.1
-- DB_PORT=<local forwarded port, e.g. 13306>
+Sign in to manage accounts and permissions. MFA-enabled accounts intentionally cannot sign in until a real verification provider is integrated. No fake OTP/email/SMS success is used.
 
-Frontend note:
-- The React client still falls back to local mock data when API calls fail, so UI remains usable while DB connectivity is being fixed.
+Run `npm run qa:catalogue-preview` to see which recovered service/concept records would be added. Existing matching titles/slugs are retained. Review and back up QA, set D16_SEED_ACTOR_ID to the approved administrator's UUID, then run `npm run qa:catalogue-import`. Imports are serialized by an advisory lock and each inserted record has attributed audit history. This does not merge conflicting existing descriptions automatically.
+
+The public catalogue import covers 18 services/72 subsections and 12 concepts. Configure the three required hero slides and business branding in admin; the script does not replace existing branding, hero edits or client records.
+
+## 5. Run and verify
+
+- `npm run dev`: demo-only frontend; no database required.
+- `npm run dev:full`: QA API + database-mode frontend on localhost. Stop the demo server first if it occupies port 5173.
+- `npm run build:qa`: database-mode frontend build. It does not deploy or migrate anything.
+- `npm test`, `npm run lint`: offline/local checks.
+- `npm run test:database`: Docker-based disposable local integration test. It does not read the hosted QA environment file; it removes only its own synthetic test container afterward.
+
+`/api/health` returns HTTP 200 only with database and security configuration available. Missing configuration/network access returns HTTP 503; never treat it as a successful save. A network interruption during a write can leave the outcome uncertain: reload/check before retrying.
+
+Legacy shell connectivity checks are read-only. They verify the native schema/synthetic seed, not the full CMS/auth/encryption integration. Use them only if that synthetic seed was intentionally applied. The environment loader parses passwords as data, not executable shell content.
+
+## 6. Before production release
+
+This code is QA-first, not a signed-off production release. Complete and verify:
+
+- Hosting runtime/reverse proxy/HTTPS connectivity, actual QA migrations and encrypted end-to-end saves.
+- Controlled re-encryption migration for any old raw UTF-8 or differently encrypted records. The API rejects them rather than silently displaying plaintext.
+- Separate production credentials/keys and least-privilege users. Runtime audit_logs grants should be SELECT/INSERT only; remove UPDATE/DELETE/DDL rights. Current cPanel ALL grants are not append-only protection.
+- Restore-tested database + upload + key backups, retention rules and alerting.
+- Real MFA/delivery provider, key rotation/KMS integration, shared rate limiting if more than one API process.
+- Client UAT, real approved photographs/team profiles/video URLs, accessibility and cross-browser review.
+- Explicit release approval and a separately reviewed production configuration change.
+
+Never upload the full source folder, private backups or .env files into public_html or Netlify's published directory.

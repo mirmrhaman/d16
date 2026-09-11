@@ -1,12 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Award, Users, TrendingUp, Star, Target, Briefcase } from "lucide-react";
 import { statsClient } from "@/api/statsClient";
 import { useQuery } from "@tanstack/react-query";
-
-const iconMap = {
-  Award, Users, TrendingUp, Star, Target, Briefcase
-};
+import SiteIcon from "@/components/SiteIcon";
 
 export default function StatsSection() {
   const { data: stats = [] } = useQuery({
@@ -42,7 +38,6 @@ export default function StatsSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {stats.map((stat, index) => {
-            const Icon = iconMap[stat.icon] || Award;
             return (
               <motion.div
                 key={stat.id}
@@ -53,7 +48,7 @@ export default function StatsSection() {
                 className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center hover:bg-white/20 transition-all duration-300 hover-lift"
               >
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent)] rounded-full mb-6">
-                  <Icon className="text-white" size={32} />
+                  <SiteIcon iconKey={`stats.${stat.id}`} fallback={stat.icon || 'Award'} className="text-white" size={32} />
                 </div>
                 <h3 className="text-5xl font-bold text-white mb-3">{stat.value}</h3>
                 <p className="text-lg text-gray-200">{stat.label}</p>

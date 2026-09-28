@@ -5,7 +5,8 @@ import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, GripVertical, Plus, Rotate
 import { base44 } from '@/api/base44Client';
 import { IS_DEMO } from '@/api/transport';
 import { useAuth } from '@/context/AuthContext';
-import { DEFAULT_NAVIGATION_MENU, NAVIGATION_MENU_ID, NAVIGATION_PAGES, normalizeNavigationItems, validateNavigationItems } from '@/data/navigation';
+import { DEFAULT_NAVIGATION_MENU, NAVIGATION_MENU_ID, MAX_NAVIGATION_ITEMS, navigationPageChoices, isCustomPageDestination, normalizeNavigationItems, validateNavigationItems } from '@/data/navigation';
+import CustomPageManager from '@/components/CustomPageManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -41,6 +42,7 @@ function NavigationEditor({ userId }) {
     },
     staleTime: 30000,
   });
+  const customPagesQuery = useQuery({ queryKey: ['customPages', 'admin'], queryFn: () => base44.entities.CustomPage.list({ admin: true }), staleTime: 30000 });
   const [draft, setDraft] = useState(() => restoredDraft ? structuredClone(restoredDraft.items) : null);
   const [baseline, setBaseline] = useState(() => restoredDraft ? structuredClone(restoredDraft.baseline) : []);
   const [original, setOriginal] = useState(() => restoredDraft ? structuredClone(restoredDraft.original) : null);
@@ -142,10 +144,20 @@ function NavigationEditor({ userId }) {
     changeItems([...draft].sort((left, right) => direction * compare(left.label, right.label)), `Tabs sorted ${direction === 1 ? 'A–Z' : 'Z–A'} in your draft.`);
   };
   const addItem = () => {
-    const page = NAVIGATION_PAGES.find((item) => item.page === pageToAdd);
+    const page = choices.find((item) => item.page === pageToAdd);
     if (busy || !page || draft.some((item) => item.page === page.page)) return;
-    changeItems([...draft, { id: crypto.randomUUID(), page: page.page, label: page.label, visible: true }], `${page.label} added to your draft. The page content has not changed.`);
+    if (draft.length >= MAX_NAVIGATION_ITEMS) { setSaveError('This menu already has 40 tabs. Remove a menu link before adding another.'); return; }
+    changeItems([...draft, { id: crypto.randomUUID(), page: page.page, label: page.label.slice(0, 60), visible: true }], `${page.label} added to your menu draft. Select Save Tabs to apply it.`);
     setPageToAdd('');
+  };
+  const addCustomPage = (page) => {
+    if (busy || loadError || draft === null) { setSaveError('Wait for the menu to finish loading or saving, then add the page again.'); return false; }
+    if (page.published !== true) { setSaveError('Save this page as published before adding it to the menu.'); return false; }
+    const destination = `custom:${page.id}`;
+    if (draft.some((item) => item.page === destination)) { setStatus('This page is already in your menu draft. Use its Show checkbox to make the tab visible.'); return false; }
+    if (draft.length >= MAX_NAVIGATION_ITEMS) { setSaveError('This menu already has 40 tabs. Remove a menu link before adding another.'); return false; }
+    changeItems([...draft, { id: crypto.randomUUID(), page: destination, label: page.title.slice(0, 60), visible: true }], `${page.title} added to your menu draft. Select Save Tabs below to show this link on the website.`);
+    return true;
   };
   const reloadSaved = async () => {
     if (busy) return;
@@ -178,7 +190,9 @@ function NavigationEditor({ userId }) {
   };
   const isLocalDrag = (event) => Boolean(dragSource.current && draft?.some((item) => item.id === dragSource.current) && Array.from(event.dataTransfer.types || []).includes(DRAG_TYPE));
   const endDrag = () => { dragSource.current = ''; setDropTarget(''); };
-  const availablePages = NAVIGATION_PAGES.filter((page) => !draft?.some((item) => item.page === page.page));
+  const choices = navigationPageChoices(customPagesQuery.data);
+  const allChoices = navigationPageChoices(customPagesQuery.data, { includeDrafts: true });
+  const availablePages = choices.filter((page) => !draft?.some((item) => item.page === page.page));
   const visibleItems = (draft || []).filter((item) => item.visible);
 
   return <div className="min-h-screen bg-gray-50 py-8 sm:py-12"><div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -186,7 +200,7 @@ function NavigationEditor({ userId }) {
       <div className="flex items-center gap-4"><Link to="/AdminDashboard" aria-label="Back to dashboard" className="rounded-lg border bg-white p-3" onClick={(event) => { if (busy || dirty) { event.preventDefault(); if (!busy) setConfirmation('leave'); } }}><ArrowLeft size={20} /></Link><div><h1 className="text-2xl font-bold text-[var(--primary)] sm:text-3xl">Website Tabs</h1><p className="mt-1 text-gray-600">Manage the links in your website navigation.</p></div></div>
       <div className="flex flex-wrap gap-3"><a href={import.meta.env.BASE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-[var(--primary)]">View website <ExternalLink size={16} /></a><Button type="submit" form="navigation-editor" disabled={busy || draft === null || Boolean(loadError)}><Save size={18} className="mr-2" />{save.isPending ? 'Saving…' : 'Save Tabs'}</Button></div>
     </div>
-    <p className="mb-6 rounded-xl border bg-white p-4 text-sm text-gray-700">Add a link to an existing page, rename its tab, reorder it, or show and hide it. Removing a tab removes only its menu link: the page, its content and its direct address remain available. You can add the page back later. This does not create new pages or external links.</p>
+    <p className="mb-6 rounded-xl border bg-white p-4 text-sm text-gray-700">Create a new page from a template below, publish it, then add it to your menu and select Save Tabs. You can also add existing pages, rename tabs, reorder them or show/hide them. Removing a tab removes only its menu link; unpublish a custom page to take its content off the public website.</p>
     <p className="mb-5 text-sm text-gray-600">Unsaved drafts are kept while you move between pages in this signed-in session. Reloading the browser or signing out discards them.</p>
     {IS_DEMO && <p className="mb-5 text-sm text-amber-800">Preview mode: saved tabs apply only in this browser, not to the live website.</p>}
     {draft === null && !loadError && <p role="status" className="rounded-xl border bg-white p-8">Loading website tabs…</p>}
@@ -199,20 +213,23 @@ function NavigationEditor({ userId }) {
     {remoteChanged && <p role="status" className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">The saved menu changed after you opened this editor. Your draft has been kept. Reload Saved to use the latest version.</p>}
     {status && <p role="status" aria-live="polite" className="mb-5 rounded-lg bg-green-50 p-4 text-green-800">{status}</p>}
     {saveError && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-red-800">{saveError}</p>}
+    <CustomPageManager onAddToMenu={addCustomPage} menuPages={(draft || []).map((item) => item.page)} />
     {draft !== null && <form id="navigation-editor" onSubmit={submit}><fieldset disabled={busy || Boolean(loadError)} className="space-y-6">
       <section aria-labelledby="navigation-preview-title" className="rounded-xl border bg-white p-5"><h2 id="navigation-preview-title" className="mb-3 font-semibold text-[var(--primary)]">Menu preview</h2>
         <div className="flex flex-wrap gap-2">{visibleItems.map((item) => <span key={item.id} className="rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800">{item.label || '(Tab label required)'}</span>)}</div>
         {visibleItems.length === 0 && <p className="text-sm text-gray-600">No menu tabs will be shown. Existing pages remain reachable by their direct addresses.</p>}
         <p className="mt-3 text-xs text-gray-500">Draft preview — changes appear on the website only after saving.</p>
       </section>
-      <section aria-labelledby="add-navigation-title" className="rounded-xl border bg-white p-5"><h2 id="add-navigation-title" className="mb-3 font-semibold text-[var(--primary)]">Add a tab</h2>
-        <div className="flex flex-wrap items-end gap-3"><div className="min-w-0 flex-1"><label htmlFor="navigation-add-page" className="mb-2 block text-sm font-medium text-gray-700">Existing page</label><select id="navigation-add-page" value={availablePages.some((page) => page.page === pageToAdd) ? pageToAdd : ''} disabled={availablePages.length === 0} onChange={(event) => setPageToAdd(event.target.value)} className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"><option value="">{availablePages.length ? 'Choose a page to add' : 'All existing pages are already in this menu'}</option>{availablePages.map((page) => <option key={page.page} value={page.page}>{page.label}</option>)}</select></div><Button type="button" variant="outline" disabled={!availablePages.some((page) => page.page === pageToAdd)} onClick={addItem}><Plus size={17} className="mr-2" />Add Tab</Button></div>
+      <section aria-labelledby="add-navigation-title" className="rounded-xl border bg-white p-5"><h2 id="add-navigation-title" className="mb-3 font-semibold text-[var(--primary)]">Add an existing page to the menu</h2>
+        <p className="mb-4 text-sm text-gray-600">Need a brand-new page? Use Create New Page above. Only published custom pages appear in this list.</p>
+        {customPagesQuery.error && <p role="alert" className="mb-3 text-sm text-red-700">Custom pages could not be loaded: {customPagesQuery.error.message}</p>}
+        <div className="flex flex-wrap items-end gap-3"><div className="min-w-0 flex-1"><label htmlFor="navigation-add-page" className="mb-2 block text-sm font-medium text-gray-700">Existing or published page</label><select id="navigation-add-page" value={availablePages.some((page) => page.page === pageToAdd) ? pageToAdd : ''} disabled={availablePages.length === 0} onChange={(event) => setPageToAdd(event.target.value)} className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"><option value="">{availablePages.length ? 'Choose a page to add' : 'All available pages are already in this menu — create a page above'}</option>{availablePages.map((page) => <option key={page.page} value={page.page}>{page.label}{page.custom ? ' (custom)' : ''}</option>)}</select></div><Button type="button" variant="outline" disabled={draft.length >= MAX_NAVIGATION_ITEMS || !availablePages.some((page) => page.page === pageToAdd)} onClick={addItem}><Plus size={17} className="mr-2" />Add Tab</Button></div>
       </section>
       <section aria-labelledby="navigation-list-title" className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="navigation-list-title" className="font-semibold text-[var(--primary)]">Your tabs ({draft.length} of {NAVIGATION_PAGES.length})</h2><p id="navigation-reorder-help" className="mt-1 text-sm text-gray-600">Drag the handle, use its arrow keys, or select Up and Down to reorder.</p></div><div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={draft.length < 2} onClick={() => sortItems(1)}>A–Z</Button><Button type="button" size="sm" variant="outline" disabled={draft.length < 2} onClick={() => sortItems(-1)}>Z–A</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="navigation-list-title" className="font-semibold text-[var(--primary)]">Your tabs ({draft.length} of {MAX_NAVIGATION_ITEMS})</h2><p id="navigation-reorder-help" className="mt-1 text-sm text-gray-600">Drag the handle, use its arrow keys, or select Up and Down to reorder.</p></div><div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={draft.length < 2} onClick={() => sortItems(1)}>A–Z</Button><Button type="button" size="sm" variant="outline" disabled={draft.length < 2} onClick={() => sortItems(-1)}>Z–A</Button></div></div>
         {draft.length === 0 && <p className="rounded-xl border bg-white p-6 text-gray-600">There are no tabs in this draft. Choose an existing page above to add one, or reset the default tabs.</p>}
         <ol className="space-y-4" aria-label="Website tabs">{draft.map((item, index) => {
-          const page = NAVIGATION_PAGES.find((entry) => entry.page === item.page);
+          const page = allChoices.find((entry) => entry.page === item.page);
           return <li key={item.id} className={`rounded-xl border bg-white p-4 sm:p-5 ${dropTarget === item.id ? 'ring-2 ring-[var(--accent)]' : ''}`}
             onDragOver={(event) => { if (!busy && isLocalDrag(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropTarget(item.id); } }}
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget((current) => current === item.id ? '' : current); }}
@@ -220,7 +237,7 @@ function NavigationEditor({ userId }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><button type="button" draggable={!busy} aria-label={`Drag ${item.label || page?.label || 'tab'} to reorder; use arrow keys to move`} aria-describedby="navigation-reorder-help" className="inline-flex min-h-10 cursor-grab items-center gap-2 rounded-md border bg-gray-50 px-3 text-sm text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] active:cursor-grabbing" onDragStart={(event) => { dragSource.current = item.id; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(DRAG_TYPE, item.id); }} onDragEnd={endDrag} onKeyDown={(event) => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); moveItem(item.id, index + (event.key === 'ArrowUp' ? -1 : 1)); } }}><GripVertical size={18} aria-hidden="true" /><span>{index + 1} of {draft.length}</span></button>
               <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={index === 0} aria-label={`Move ${item.label || 'tab'} up`} onClick={() => moveItem(item.id, index - 1)}><ArrowUp size={16} /><span className="ml-1">Up</span></Button><Button type="button" variant="outline" size="sm" disabled={index === draft.length - 1} aria-label={`Move ${item.label || 'tab'} down`} onClick={() => moveItem(item.id, index + 1)}><ArrowDown size={16} /><span className="ml-1">Down</span></Button><Button type="button" variant="outline" size="sm" aria-label={`Remove ${item.label || 'tab'} from menu`} onClick={() => changeItems(draft.filter((entry) => entry.id !== item.id), `${item.label || 'Tab'} removed from this draft menu. Its page and content were not deleted.`)}><Trash2 size={16} /><span className="ml-1">Remove</span></Button></div>
             </div>
-            <div className="grid items-end gap-4 sm:grid-cols-[1fr_auto]"><div className="min-w-0"><label htmlFor={`navigation-label-${item.id}`} className="mb-2 block text-sm font-medium text-gray-800">Tab label for {page?.label || item.page}</label><Input id={`navigation-label-${item.id}`} value={item.label} required maxLength={60} onChange={(event) => changeItems(draft.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry))} /><p className="mt-2 break-all text-xs text-gray-500">Existing page: {page?.label || item.page} · {page?.path}</p></div><label className="inline-flex min-h-10 items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium"><input type="checkbox" checked={item.visible} onChange={(event) => changeItems(draft.map((entry) => entry.id === item.id ? { ...entry, visible: event.target.checked } : entry))} className="h-4 w-4 accent-[var(--primary)]" /><span>Show {page?.label || item.page} tab</span></label></div>
+            <div className="grid items-end gap-4 sm:grid-cols-[1fr_auto]"><div className="min-w-0"><label htmlFor={`navigation-label-${item.id}`} className="mb-2 block text-sm font-medium text-gray-800">Tab label for {page?.label || item.label}</label><Input id={`navigation-label-${item.id}`} value={item.label} required maxLength={60} onChange={(event) => changeItems(draft.map((entry) => entry.id === item.id ? { ...entry, label: event.target.value } : entry))} /><p className="mt-2 break-all text-xs text-gray-500">{page?.custom ? 'Custom page' : 'Existing page'}: {page?.label || item.label} · {page?.path}</p>{isCustomPageDestination(item.page) && (!page || !page.published) && <p className="mt-2 text-sm text-amber-800">This custom page is unpublished or unavailable. Its tab stays hidden on the website until the page is published.</p>}</div><label className="inline-flex min-h-10 items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium"><input type="checkbox" checked={item.visible} onChange={(event) => changeItems(draft.map((entry) => entry.id === item.id ? { ...entry, visible: event.target.checked } : entry))} className="h-4 w-4 accent-[var(--primary)]" /><span>Show {page?.label || item.label} tab</span></label></div>
           </li>;
         })}</ol>
       </section>

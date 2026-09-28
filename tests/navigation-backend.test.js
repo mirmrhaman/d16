@@ -51,7 +51,7 @@ test('navigation defaults match frontend, preserve order and intentional empty m
 test('navigation rejects unsafe fields, duplicate pages or IDs, malformed labels and non-booleans', () => {
   const item = DEFAULT_NAVIGATION_MENU.items[0];
   const validate = (items) => cleanPublicPayload('NavigationMenu', { title: 'Website navigation', items });
-  for (const items of [null, {}, 'Home', Array(9).fill(item)]) assert.throws(() => validate(items), /at most eight/);
+  for (const items of [null, {}, 'Home', Array(41).fill(item)]) assert.throws(() => validate(items), /at most (40|forty)/);
   for (const id of ['', 'contains space', '../Home', 'a'.repeat(65), 123, null]) assert.throws(() => validate([{ ...item, id }]), /valid IDs/);
   assert.throws(() => validate([item, { ...item, page: 'About' }]), /valid IDs/);
   assert.throws(() => validate([item, { ...item, id: 'different-id' }]), /supported pages/);

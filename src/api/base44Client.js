@@ -2,7 +2,8 @@ import { IS_DEMO, createApiEntity, requestJson } from './transport.js';
 import { LIVE_SERVICES, LIVE_CONCEPTS } from '../data/liveContent.js';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../data/siteAppearance.js';
-import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, validateNavigationItems } from '../data/navigation.js';
+import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, isCustomPageDestination, validateNavigationItems } from '../data/navigation.js';
+import { validateCustomPage, isPublishedCustomPage } from '../../server/src/customPageSchema.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
@@ -300,7 +301,33 @@ const servicesStore = createStore(LIVE_SERVICES, 'd16_services');
 const aboutPageStore = createStore([{ ...DEFAULT_ABOUT, id: ABOUT_PAGE_ID }], 'd16_about_page');
 const dashboardLayoutStore = createStore([{ ...DEFAULT_DASHBOARD_LAYOUT, id: DASHBOARD_LAYOUT_ID }], 'd16_dashboard_layout');
 const websiteIconsStore = createStore([{ ...DEFAULT_WEBSITE_ICONS, id: WEBSITE_ICONS_ID }], 'd16_website_icons');
+const customPagesStore = createStore([], 'd16_custom_pages');
+const customPagesClient = {
+  async list({ admin = false } = {}) {
+    const pages = await customPagesStore.list();
+    return admin ? pages : pages.filter(isPublishedCustomPage);
+  },
+  async create(payload) {
+    return customPagesStore.create({ ...validateCustomPage(payload, { allowDataImages: true }), version: 1 });
+  },
+  async update(id, payload) {
+    const saved = (await customPagesStore.list()).find((page) => page.id === id);
+    if (!saved) throw Object.assign(new Error('Page not found. Reload the page list.'), { status: 404 });
+    if (!Number.isSafeInteger(payload.version) || payload.version < 1) throw Object.assign(new Error('A saved page version is required.'), { status: 400 });
+    if (payload.version !== saved.version) throw Object.assign(new Error('This page changed in another tab. Reload before saving.'), { status: 409 });
+    return customPagesStore.update(id, { ...validateCustomPage({ ...saved, ...payload }, { allowDataImages: true }), version: saved.version + 1 });
+  },
+  async delete() { throw Object.assign(new Error('Unpublish this page instead. Its content is kept for future editing.'), { status: 405 }); },
+};
 const navigationMenuStore = createStore([{ ...DEFAULT_NAVIGATION_MENU, id: NAVIGATION_MENU_ID, version: 1 }], 'd16_navigation_menu');
+const validatedMenuItems = async (items) => {
+  const normalized = validateNavigationItems(items);
+  const pages = await customPagesStore.list();
+  if (normalized.some((item) => isCustomPageDestination(item.page) && !pages.some((page) => page.id === item.page.slice(7)))) {
+    throw Object.assign(new Error('A custom page in this menu no longer exists. Remove its tab or reload the page list.'), { status: 400 });
+  }
+  return normalized;
+};
 const navigationMenuClient = {
   async list() {
     return (await navigationMenuStore.list()).map((record) => ({ ...record, version: Number.isSafeInteger(record.version) && record.version > 0 ? record.version : 1 }));
@@ -310,14 +337,14 @@ const navigationMenuClient = {
     // have intentionally been removed. Never create a second menu record.
     const [saved] = await navigationMenuStore.list();
     if (saved) throw new Error('Website tabs already exist. Reload the saved version before editing.');
-    return navigationMenuStore.create({ title: DEFAULT_NAVIGATION_MENU.title, items: validateNavigationItems(payload.items) });
+    return navigationMenuStore.create({ title: DEFAULT_NAVIGATION_MENU.title, items: await validatedMenuItems(payload.items), version: 1 });
   },
   async update(id, payload) {
     const saved = (await navigationMenuClient.list()).find((record) => record.id === id);
     if (!saved) throw new Error('Website tabs were not found. Reload the saved version.');
     if (!Number.isSafeInteger(payload.version) || payload.version < 1) throw Object.assign(new Error('Reload the saved website tabs before saving.'), { status: 400 });
     if (payload.version !== saved.version) throw Object.assign(new Error('Website tabs changed in another preview tab. Reload before saving.'), { status: 409 });
-    return navigationMenuStore.update(id, { title: DEFAULT_NAVIGATION_MENU.title, items: validateNavigationItems(payload.items), version: saved.version + 1 });
+    return navigationMenuStore.update(id, { title: DEFAULT_NAVIGATION_MENU.title, items: await validatedMenuItems(payload.items), version: saved.version + 1 });
   },
   async delete() { throw new Error('Remove individual tabs or reset the menu instead.'); },
 };
@@ -362,6 +389,7 @@ const demoClient = {
     },
   },
   entities: {
+    CustomPage: customPagesClient,
     NavigationMenu: navigationMenuClient,
     DashboardLayout: dashboardLayoutStore,
     WebsiteIcons: websiteIconsStore,
@@ -383,7 +411,15 @@ const demoClient = {
 
 const endpoints = { NavigationMenu: 'navigation-menu', DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
 const realClient = {
-  entities: { ...Object.fromEntries(Object.entries(endpoints).map(([name, path]) => [name, createApiEntity(path)])), AccessControl: createApiEntity('access-control') },
+  entities: { ...Object.fromEntries(Object.entries(endpoints).map(([name, path]) => [name, createApiEntity(path)])), AccessControl: createApiEntity('access-control'), CustomPage: {
+    ...createApiEntity('custom-pages'),
+    async list({ admin = false } = {}) {
+      const response = await requestJson(`/custom-pages${admin ? '?admin=1' : ''}`);
+      const pages = response?.data ?? response;
+      if (!Array.isArray(pages)) throw new Error('The database service returned an invalid page list.');
+      return pages;
+    },
+  } },
   auth: {
     async login(credentials) { const data = await requestJson('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }); return data.user ?? data.data ?? data; },
     async me() { try { const data = await requestJson('/auth/me'); return data.user ?? data.data ?? data; } catch (error) { if (error.status === 401) return null; throw error; } },

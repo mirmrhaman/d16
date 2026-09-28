@@ -8,6 +8,7 @@ import mysql from 'mysql2/promise';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../src/data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../src/data/siteAppearance.js';
 import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU } from '../src/data/navigation.js';
+import { createCustomPage } from '../server/src/customPageSchema.js';
 
 const container = `d16-sync-test-${randomUUID().slice(0, 8)}`;
 const password = randomBytes(32).toString('base64url');
@@ -150,6 +151,46 @@ try {
   }
   console.log('PASS: shared dashboard/icon/navigation persistence, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
 
+  assert.equal((await request('/custom-pages?admin=1', 'GET', undefined, '')).status, 401);
+  assert.equal((await request('/custom-pages', 'POST', { ...createCustomPage(), title: 'Anonymous draft' }, '')).status, 401);
+  const customDraft = await request('/custom-pages', 'POST', { ...createCustomPage('faq'), title: 'Synthetic FAQ draft', items: [{ id: 'one', title: 'Question?', text: 'Plain-text answer', image: '', meta: '' }], actor_user_id: 'forged' });
+  assert.equal(customDraft.status, 201, JSON.stringify(customDraft.body));
+  assert.equal(customDraft.body.version, 1);
+  assert(!(await request('/custom-pages', 'GET', undefined, '')).body.some((row) => row.id === customDraft.body.id));
+  assert((await request('/custom-pages?admin=1')).body.some((row) => row.id === customDraft.body.id));
+  assert.equal((await request(`/custom-pages/${customDraft.body.id}`, 'PUT', { published: true })).status, 400);
+  assert.equal((await request(`/custom-pages/${customDraft.body.id}`, 'PUT', { version: 1, hero_image: 'javascript:alert(1)' })).status, 400);
+  const publishedCustom = await request(`/custom-pages/${customDraft.body.id}`, 'PUT', { version: 1, published: true });
+  assert.equal(publishedCustom.status, 200, JSON.stringify(publishedCustom.body));
+  assert((await request('/custom-pages', 'GET', undefined, '')).body.some((row) => row.id === customDraft.body.id));
+  const simultaneousCustomEdits = await Promise.all([
+    request(`/custom-pages/${customDraft.body.id}`, 'PUT', { version: publishedCustom.body.version, title: 'Synthetic FAQ first edit' }),
+    request(`/custom-pages/${customDraft.body.id}`, 'PUT', { version: publishedCustom.body.version, title: 'Synthetic FAQ second edit' }),
+  ]);
+  assert.deepEqual(simultaneousCustomEdits.map((entry) => entry.status).sort(), [200, 409]);
+  const currentCustomPage = (await request('/custom-pages?admin=1')).body.find((row) => row.id === customDraft.body.id);
+  const failingCustomAudit = content.createContentRepository({ database: pool, audit: async () => { throw new Error('synthetic custom-page audit failure'); } });
+  await assert.rejects(failingCustomAudit.updateContent('CustomPage', currentCustomPage.id, { ...currentCustomPage, published: false }, { userId: admin.id }), /audit failure/);
+  assert.deepEqual((await request('/custom-pages?admin=1')).body.find((row) => row.id === customDraft.body.id), currentCustomPage);
+  const customAudit = (await request('/audit-logs')).body.filter((row) => row.entity_name === 'CustomPage');
+  assert.equal(customAudit.length, 3);
+  assert(customAudit.every((row) => row.actor_user_id === admin.id && row.created_at && row.entity_id === customDraft.body.id));
+  assert(customAudit.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['published'])));
+  assert(!JSON.stringify(customAudit).includes('Synthetic FAQ'));
+  const currentMenu = (await request('/navigation-menu')).body[0];
+  const customLink = { id: 'nav-custom-faq', page: `custom:${customDraft.body.id}`, label: 'FAQ', visible: true };
+  const linkedCustom = await request(`/navigation-menu/${NAVIGATION_MENU_ID}`, 'PUT', { ...currentMenu, items: [customLink] });
+  assert.equal(linkedCustom.status, 200, JSON.stringify(linkedCustom.body));
+  assert.equal((await request(`/navigation-menu/${NAVIGATION_MENU_ID}`, 'PUT', { ...linkedCustom.body, items: [{ ...customLink, page: `custom:${randomUUID()}` }] })).status, 400);
+  const unpublishedCustom = await request(`/custom-pages/${currentCustomPage.id}`, 'PUT', { version: currentCustomPage.version, published: false });
+  assert.equal(unpublishedCustom.status, 200);
+  assert(!(await request('/custom-pages', 'GET', undefined, '')).body.some((row) => row.id === currentCustomPage.id));
+  assert.equal((await request(`/custom-pages/${currentCustomPage.id}`, 'DELETE', {})).status, 405);
+  for (const name of migrations) await database.query(readFileSync(`database/migrations/${name}`, 'utf8'));
+  assert.deepEqual((await request('/custom-pages?admin=1')).body.find((row) => row.id === currentCustomPage.id), unpublishedCustom.body);
+  assert.deepEqual((await request('/navigation-menu')).body[0].items, [customLink]);
+  console.log('PASS: custom-page draft privacy, publication/unpublication, custom navigation references, mandatory/concurrent versions, retained migrations and attributed atomic history');
+
   const about = (await request('/about-page', 'GET', undefined, '')).body[0];
   assert.equal(about.id, ABOUT_PAGE_ID);
   const aboutEdit = await request(`/about-page/${about.id}`, 'PUT', { version: about.version, mission_text: 'Approved synthetic mission', vision_text: 'Approved synthetic vision', team_members: [...about.team_members].reverse() });
@@ -173,6 +214,9 @@ try {
   assert.equal(superLogin.status, 200);
   const superCookie = superLogin.response.headers.get('set-cookie').split(';')[0];
   assert.equal((await request('/dashboard-layout', 'GET', undefined, superCookie)).status, 403);
+  assert.equal((await request('/custom-pages?admin=1', 'GET', undefined, superCookie)).status, 403);
+  assert.equal((await request('/custom-pages', 'POST', { ...createCustomPage(), title: 'Denied super draft' }, superCookie)).status, 403);
+  assert.equal((await request(`/custom-pages/${customDraft.body.id}`, 'PUT', { version: unpublishedCustom.body.version, published: true }, superCookie)).status, 403);
   for (const [endpoint, id] of [['/dashboard-layout', DASHBOARD_LAYOUT_ID], ['/website-icons', WEBSITE_ICONS_ID], ['/navigation-menu', NAVIGATION_MENU_ID]]) {
     assert.equal((await request(endpoint, 'POST', { title: 'Denied Super configuration' }, superCookie)).status, 403);
     assert.equal((await request(`${endpoint}/${id}`, 'PUT', { title: 'Denied Super configuration' }, superCookie)).status, 403);

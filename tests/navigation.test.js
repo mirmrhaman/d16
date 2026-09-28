@@ -45,9 +45,11 @@ test('every configured destination has a real public route; all menu surfaces us
   const app = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
   for (const { path } of NAVIGATION_PAGES) assert.ok(app.includes(`path="${path}"`), `Missing route ${path}`);
   const layout = await readFile(new URL('../src/Layout.jsx', import.meta.url), 'utf8');
-  assert.equal((layout.match(/navigationItems\.map/g) || []).length, 3);
+  assert.equal((layout.match(/navigationItems\.map/g) || []).length, 2);
+  assert.match(layout, /desktopItems\.map/);
+  assert.match(layout, /overflowItems\.map/);
   assert.match(layout, /base44\.entities\.NavigationMenu\.list/);
-  assert.match(layout, /visibleNavigationItems\(navigationRecord\?\.items\)/);
+  assert.match(layout, /visibleNavigationItems\(navigationRecord\?\.items, customPages\)/);
   assert.match(layout, /to="\/login"/);
   assert.match(layout, /to=\{adminLanding\(user, IS_DEMO\)\}/);
 });

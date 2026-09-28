@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { pool } from "./db.js";
 import { encryptText, decryptText, lookupHash } from "./security.js";
 import { writeAudit } from "./auditService.js";
+import { validateCustomPage } from "./customPageSchema.js";
 
 const publicFields = {
   HeroSlide: ["title", "subtitle", "image", "order", "active"],
@@ -18,6 +19,7 @@ const publicFields = {
   DashboardLayout: ["title", "card_order"],
   WebsiteIcons: ["title", "icons"],
   NavigationMenu: ["title", "items"],
+  CustomPage: ["title", "page_type", "intro", "body", "hero_image", "items", "published"],
 };
 export const ABOUT_PAGE_ID = "8c3de170-4be7-4e45-9f3d-618d0b20c613";
 export const DASHBOARD_LAYOUT_ID = "79310606-6485-4cc3-ab09-d99d08d67f5e";
@@ -25,7 +27,7 @@ export const WEBSITE_ICONS_ID = "fb68d11f-55bc-4e6b-942f-f784dcb0c912";
 export const NAVIGATION_MENU_ID = "a7bf2755-1d82-4c2e-9ad3-729f04c565d1";
 const singletonIds = { AboutPage: ABOUT_PAGE_ID, DashboardLayout: DASHBOARD_LAYOUT_ID, WebsiteIcons: WEBSITE_ICONS_ID, NavigationMenu: NAVIGATION_MENU_ID };
 const appearanceEntities = new Set(["DashboardLayout", "WebsiteIcons"]);
-const versionedConfigurations = new Set([...appearanceEntities, "NavigationMenu"]);
+const versionedConfigurations = new Set([...appearanceEntities, "NavigationMenu", "CustomPage"]);
 const dashboardCards = new Set(["AdminAbout", "AdminHistory", "AdminHeroSlides", "AdminStats", "AdminServices", "AdminProjects", "AdminGallery", "AdminPicYourConcept", "AdminBlog", "AdminConsultations", "AdminContactInfo", "AdminLogo", "AdminLocations", "AdminSocialMedia", "AdminTheme", "AdminUsers", "AdminAccessControl", "AdminIcons", "AdminNavigation"]);
 const navigationPages = new Set(["Home", "About", "Services", "Portfolio", "PicYourConcept", "Gallery", "Blog", "Contact"]);
 // Kept server-side so API deployments do not depend on frontend source files.
@@ -105,16 +107,17 @@ const validateAppearancePayload = (entity, result) => {
 
 const validateNavigationPayload = (result) => {
   if (typeof result.title !== "string" || result.title.length > 300) throw errorWithStatus("Navigation title must be at most 300 characters", 400);
-  if (!Array.isArray(result.items) || result.items.length > 8) throw errorWithStatus("Navigation must contain at most eight items", 400);
+  if (!Array.isArray(result.items) || result.items.length > 40) throw errorWithStatus("Navigation must contain at most 40 items", 400);
   const ids = new Set(); const pages = new Set();
   result.items = result.items.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["id", "page", "label", "visible"].includes(key))) throw errorWithStatus("Navigation items accept only id, page, label and visible", 400);
     if (typeof item.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id)) throw errorWithStatus("Navigation items need unique valid IDs", 400);
-    if (typeof item.page !== "string" || !navigationPages.has(item.page) || pages.has(item.page)) throw errorWithStatus("Navigation items need unique supported pages", 400);
+    const customPage = typeof item.page === "string" && item.page.startsWith("custom:") && uuidPattern.test(item.page.slice(7));
+    if (typeof item.page !== "string" || (!navigationPages.has(item.page) && !customPage) || pages.has(item.page.toLowerCase())) throw errorWithStatus("Navigation items need unique supported pages", 400);
     if (typeof item.label !== "string" || !item.label.trim() || item.label.trim().length > 60 || [...item.label].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw errorWithStatus("Navigation labels must contain 1 to 60 characters without control characters", 400);
     if (typeof item.visible !== "boolean") throw errorWithStatus("Navigation visibility must be a boolean", 400);
-    ids.add(item.id); pages.add(item.page);
-    return { id: item.id, page: item.page, label: item.label.trim(), visible: item.visible };
+    ids.add(item.id); pages.add(item.page.toLowerCase());
+    return { id: item.id, page: customPage ? item.page.toLowerCase() : item.page, label: item.label.trim(), visible: item.visible };
   });
 };
 
@@ -142,6 +145,10 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   assertSafeJson(result);
   if (Buffer.byteLength(JSON.stringify(result)) > 1024 * 1024) throw errorWithStatus("Content is too large", 400);
+  if (canonical === "CustomPage") {
+    try { return validateCustomPage(result); }
+    catch (error) { throw errorWithStatus(error.message, 400); }
+  }
   const arrayFields = new Set(["features", "gallery_images", "sub_services", "locations", "approach_steps", "team_members", "card_order", "items"]);
   const booleanFields = new Set(["active", "featured", "published"]);
   for (const [field, value] of Object.entries(result)) {
@@ -316,13 +323,16 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
       if (previous && payload.version != null && Number(payload.version) !== previous.version) throw errorWithStatus("Content was changed by another editor; refresh before saving", 409);
       const previousPayload = previous ? jsonObject(previous.payload) : {};
       const cleaned = cleanPublicPayload(entity, payload, previousPayload);
+      if (entity === "NavigationMenu") {
+        for (const item of cleaned.items) if (item.page.startsWith("custom:") && !await readPublic(connection, "CustomPage", item.page.slice(7))) throw errorWithStatus("A linked custom page no longer exists; choose a saved page before saving navigation", 400);
+      }
       try { await savePublic(connection, entity, id, cleaned, isNew); }
       catch (error) {
         if (Object.hasOwn(singletonIds, entity) && error.code === "ER_DUP_ENTRY") throw errorWithStatus("This configuration already exists; refresh before saving", 409);
         throw error;
       }
       const changedFields = Object.keys(cleaned).filter((key) => Object.hasOwn(payload, key)
-        && (!Object.hasOwn(singletonIds, entity) || isNew || !isDeepStrictEqual(cleaned[key], previousPayload[key])));
+        && ((!Object.hasOwn(singletonIds, entity) && entity !== "CustomPage") || isNew || !isDeepStrictEqual(cleaned[key], previousPayload[key])));
       await audit(connection, { actor, action: isNew ? "create" : "update", entityName: entity, entityId: id, changedFields });
       return mapPublic(await readPublic(connection, entity, id));
     });
@@ -332,6 +342,7 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
     const entity = normalizeEntity(requested);
     if (entity === "ContactInfo") throw errorWithStatus("Contact profile deletion is not supported", 405);
     if (entity === "AboutPage") throw errorWithStatus("The About page cannot be deleted; edit its sections instead", 405);
+    if (entity === "CustomPage") throw errorWithStatus("Custom pages cannot be deleted; unpublish the page to keep its content and history", 405);
     if (versionedConfigurations.has(entity)) throw errorWithStatus("This configuration cannot be deleted; reset its settings instead", 405);
     if (entity !== "Consultation" && !publicFields[entity]) throw errorWithStatus("Unsupported content entity", 400);
     return transaction(async (connection) => {

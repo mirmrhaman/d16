@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { createAuthService, SECTION_PERMISSIONS } from './authService.js';
 import { httpError, lookupHash, validateSecurityConfig } from './security.js';
+import { isPublishedCustomPage } from './customPageSchema.js';
 
 const COOKIE = 'd16_session';
 const asyncRoute = (callback) => (req, res, next) => Promise.resolve(callback(req, res, next)).catch(next);
@@ -19,8 +20,9 @@ const routes = [
   ['about-page', 'AboutPage', 'content.write'],
   ['dashboard-layout', 'DashboardLayout', 'branding.write'], ['website-icons', 'WebsiteIcons', 'branding.write'],
   ['navigation-menu', 'NavigationMenu', 'branding.write'],
+  ['custom-pages', 'CustomPage', 'branding.write'],
 ];
-const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons', 'NavigationMenu']);
+const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons', 'NavigationMenu', 'CustomPage']);
 const entitySections = { HeroSlide: 'HeroSlides', Stats: 'Stats', Service: 'Services', Project: 'Projects', BlogPost: 'Blog', GalleryVideo: 'Gallery', GalleryConcept: 'Gallery', PicYourConcept: 'PicYourConcept', AboutPage: 'About' };
 const unavailableCodes = new Set(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'ER_ACCESS_DENIED_ERROR', 'ER_NO_SUCH_TABLE']);
 
@@ -128,10 +130,12 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
         req.user = await auth.getSession(cookieToken(req));
         if (!req.user) throw httpError(401, 'Please sign in.');
         if (entity === 'DashboardLayout' && req.user.role !== 'admin') throw httpError(403, 'Only administrators can read the dashboard layout.');
-        const readPermission = entity === 'Consultation' ? 'consultations.read' : 'content.read';
+        if (entity === 'CustomPage' && req.user.role !== 'admin') throw httpError(403, 'Only administrators can read unpublished pages.');
+        const readPermission = entity === 'Consultation' ? 'consultations.read' : entity === 'CustomPage' ? 'branding.write' : 'content.read';
         if (!req.user.permissions.includes(readPermission)) throw httpError(403, 'Your account cannot read this content.');
       }
       let rows = await content.listContent(entity);
+      if (!adminRead && entity === 'CustomPage') rows = rows.filter(isPublishedCustomPage);
       if (!adminRead && entity === 'HeroSlide') rows = rows.filter((row) => row.active !== false && row.active !== 0 && row.is_active !== false && row.is_active !== 0);
       if (!adminRead && entity === 'BlogPost') rows = rows.filter((row) => {
         if (row.published === false || row.published === 0) return false;

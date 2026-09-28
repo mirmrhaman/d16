@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, Images, BookOpen } from "lucide-react";
+import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, Images, BookOpen, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { contactInfoClient } from "@/api/contactInfoClient";
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQuery
@@ -62,15 +62,25 @@ export default function Layout({ children }) {
     staleTime: 30000,
   });
   const navigationRecord = navigationRecords?.find((record) => record.id === NAVIGATION_MENU_ID) || navigationRecords?.[0];
-  const navigationItems = visibleNavigationItems(navigationRecord?.items).map((item) => ({
+  const { data: customPages = [] } = useQuery({
+    queryKey: ['customPages', 'public'],
+    queryFn: () => base44.entities.CustomPage.list(),
+    staleTime: 30000,
+  });
+  const navigationItems = visibleNavigationItems(navigationRecord?.items, customPages).map((item) => ({
     ...item, title: item.label, url: item.path, icon: NAVIGATION_ICONS[item.icon] || Home,
   }));
   const showConsultationLink = navigationItems.some((item) => item.page === 'Contact');
+  const desktopItems = navigationItems.slice(0, 5);
+  const overflowItems = navigationItems.slice(5);
 
   useEffect(() => {
-    const refresh = () => queryClient.invalidateQueries({ queryKey: ['navigationMenu'] });
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ['navigationMenu'] });
+      queryClient.invalidateQueries({ queryKey: ['customPages'] });
+    };
     const onStorage = (event) => {
-      if (IS_DEMO && event.key === 'd16_navigation_menu_demo_v2') refresh();
+      if (IS_DEMO && ['d16_navigation_menu_demo_v2', 'd16_custom_pages_demo_v2'].includes(event.key)) refresh();
     };
     window.addEventListener('storage', onStorage);
     window.addEventListener('d16-navigation-refresh', refresh);
@@ -201,7 +211,7 @@ export default function Layout({ children }) {
 
             {/* Desktop Navigation */}
             <nav aria-label="Main navigation" className="hidden xl:flex min-w-0 items-center space-x-5 ml-5">
-              {navigationItems.map((item) => (
+              {desktopItems.map((item) => (
                 <Link
                   key={item.id}
                   to={item.url}
@@ -209,17 +219,23 @@ export default function Layout({ children }) {
                   aria-current={isActive(item.url) ? 'page' : undefined}
                   className={`min-w-0 max-w-32 truncate text-sm font-medium tracking-wide transition-colors duration-300 ${
                     isActive(item.url)
-                      ? 'text-[var(--accent)]'
+                      ? 'text-white underline underline-offset-8'
                       : 'text-gray-200 hover:text-white'
                   }`}
                 >
                   {item.title}
                 </Link>
               ))}
+              {overflowItems.length > 0 && <details className="relative shrink-0" onKeyDown={(event) => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
+                <summary className="flex cursor-pointer list-none items-center gap-1 rounded px-2 py-2 text-sm font-medium text-gray-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 [&::-webkit-details-marker]:hidden">More <ChevronDown size={16} aria-hidden="true" /></summary>
+                <div className="absolute right-0 top-full mt-3 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-white/20 bg-[var(--primary-dark)] p-2 shadow-xl">
+                  {overflowItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={(event) => { event.currentTarget.closest('details').open = false; }} className={`block break-words rounded-lg px-4 py-3 text-sm text-white hover:bg-white/10 ${isActive(item.url) ? 'bg-white/10 font-semibold' : ''}`}>{item.title}</Link>)}
+                </div>
+              </details>}
               {isAdmin && (
                 <Link
                   to={adminLanding(user, IS_DEMO)}
-                  className={`text-sm font-medium tracking-wide transition-colors duration-300 flex items-center gap-2 ${
+                  className={`shrink-0 text-sm font-medium tracking-wide transition-colors duration-300 flex items-center gap-2 ${
                     isActive(adminLanding(user, IS_DEMO))
                       ? 'text-[var(--accent)]'
                       : 'text-gray-200 hover:text-white'
@@ -230,7 +246,7 @@ export default function Layout({ children }) {
                 </Link>
               )}
               {user ? (
-                <Button variant="outline" onClick={logout}>
+                <Button variant="outline" className="shrink-0 whitespace-nowrap" onClick={logout}>
                   Logout ({user.role})
                 </Button>
               ) : (
@@ -271,7 +287,7 @@ export default function Layout({ children }) {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive(item.url)
-                      ? 'bg-white/10 text-[var(--accent)]'
+                      ? 'bg-white/10 text-white font-semibold'
                       : 'text-gray-200 hover:bg-white/5'
                   }`}
                 >

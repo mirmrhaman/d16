@@ -17,13 +17,17 @@ const publicFields = {
   AboutPage: ["title", "subtitle", "hero_image", "philosophy_title", "philosophy_text", "philosophy_detail", "mission_summary", "philosophy_image", "approach_title", "approach_subtitle", "approach_steps", "principles_title", "principles_subtitle", "vision_title", "vision_text", "mission_title", "mission_text", "team_title", "team_subtitle", "team_members"],
   DashboardLayout: ["title", "card_order"],
   WebsiteIcons: ["title", "icons"],
+  NavigationMenu: ["title", "items"],
 };
 export const ABOUT_PAGE_ID = "8c3de170-4be7-4e45-9f3d-618d0b20c613";
 export const DASHBOARD_LAYOUT_ID = "79310606-6485-4cc3-ab09-d99d08d67f5e";
 export const WEBSITE_ICONS_ID = "fb68d11f-55bc-4e6b-942f-f784dcb0c912";
-const singletonIds = { AboutPage: ABOUT_PAGE_ID, DashboardLayout: DASHBOARD_LAYOUT_ID, WebsiteIcons: WEBSITE_ICONS_ID };
+export const NAVIGATION_MENU_ID = "a7bf2755-1d82-4c2e-9ad3-729f04c565d1";
+const singletonIds = { AboutPage: ABOUT_PAGE_ID, DashboardLayout: DASHBOARD_LAYOUT_ID, WebsiteIcons: WEBSITE_ICONS_ID, NavigationMenu: NAVIGATION_MENU_ID };
 const appearanceEntities = new Set(["DashboardLayout", "WebsiteIcons"]);
-const dashboardCards = new Set(["AdminAbout", "AdminHistory", "AdminHeroSlides", "AdminStats", "AdminServices", "AdminProjects", "AdminGallery", "AdminPicYourConcept", "AdminBlog", "AdminConsultations", "AdminContactInfo", "AdminLogo", "AdminLocations", "AdminSocialMedia", "AdminTheme", "AdminUsers", "AdminAccessControl", "AdminIcons"]);
+const versionedConfigurations = new Set([...appearanceEntities, "NavigationMenu"]);
+const dashboardCards = new Set(["AdminAbout", "AdminHistory", "AdminHeroSlides", "AdminStats", "AdminServices", "AdminProjects", "AdminGallery", "AdminPicYourConcept", "AdminBlog", "AdminConsultations", "AdminContactInfo", "AdminLogo", "AdminLocations", "AdminSocialMedia", "AdminTheme", "AdminUsers", "AdminAccessControl", "AdminIcons", "AdminNavigation"]);
+const navigationPages = new Set(["Home", "About", "Services", "Portfolio", "PicYourConcept", "Gallery", "Blog", "Contact"]);
 // Kept server-side so API deployments do not depend on frontend source files.
 // Tests verify parity with the public icon picker; no arbitrary component names.
 export const WEBSITE_ICON_NAMES = [
@@ -99,6 +103,21 @@ const validateAppearancePayload = (entity, result) => {
   }
 };
 
+const validateNavigationPayload = (result) => {
+  if (typeof result.title !== "string" || result.title.length > 300) throw errorWithStatus("Navigation title must be at most 300 characters", 400);
+  if (!Array.isArray(result.items) || result.items.length > 8) throw errorWithStatus("Navigation must contain at most eight items", 400);
+  const ids = new Set(); const pages = new Set();
+  result.items = result.items.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["id", "page", "label", "visible"].includes(key))) throw errorWithStatus("Navigation items accept only id, page, label and visible", 400);
+    if (typeof item.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id)) throw errorWithStatus("Navigation items need unique valid IDs", 400);
+    if (typeof item.page !== "string" || !navigationPages.has(item.page) || pages.has(item.page)) throw errorWithStatus("Navigation items need unique supported pages", 400);
+    if (typeof item.label !== "string" || !item.label.trim() || item.label.trim().length > 60 || [...item.label].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw errorWithStatus("Navigation labels must contain 1 to 60 characters without control characters", 400);
+    if (typeof item.visible !== "boolean") throw errorWithStatus("Navigation visibility must be a boolean", 400);
+    ids.add(item.id); pages.add(item.page);
+    return { id: item.id, page: item.page, label: item.label.trim(), visible: item.visible };
+  });
+};
+
 const assertSafeJson = (value, depth = 0) => {
   if (depth > 8) throw errorWithStatus("Content nesting is too deep", 400);
   if (Array.isArray(value)) {
@@ -123,7 +142,7 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   assertSafeJson(result);
   if (Buffer.byteLength(JSON.stringify(result)) > 1024 * 1024) throw errorWithStatus("Content is too large", 400);
-  const arrayFields = new Set(["features", "gallery_images", "sub_services", "locations", "approach_steps", "team_members", "card_order"]);
+  const arrayFields = new Set(["features", "gallery_images", "sub_services", "locations", "approach_steps", "team_members", "card_order", "items"]);
   const booleanFields = new Set(["active", "featured", "published"]);
   for (const [field, value] of Object.entries(result)) {
     if (arrayFields.has(field) || field === "social_links" || field === "icons" || field === "order") continue;
@@ -167,6 +186,7 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   if (canonical === "AboutPage") validateAboutPayload(result);
   if (appearanceEntities.has(canonical)) validateAppearancePayload(canonical, result);
+  if (canonical === "NavigationMenu") validateNavigationPayload(result);
   return result;
 };
 
@@ -292,7 +312,7 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
       if (entity === "Consultation") return saveConsultation(connection, id, payload, actor, isNew);
       const previous = isNew ? null : await readPublic(connection, entity, id, true);
       if (!isNew && !previous) throw errorWithStatus("Content not found", 404);
-      if (!isNew && appearanceEntities.has(entity) && (!Number.isSafeInteger(payload.version) || payload.version < 1)) throw errorWithStatus("A valid saved version is required; refresh this configuration before saving", 400);
+      if (!isNew && versionedConfigurations.has(entity) && (!Number.isSafeInteger(payload.version) || payload.version < 1)) throw errorWithStatus("A valid saved version is required; refresh this configuration before saving", 400);
       if (previous && payload.version != null && Number(payload.version) !== previous.version) throw errorWithStatus("Content was changed by another editor; refresh before saving", 409);
       const previousPayload = previous ? jsonObject(previous.payload) : {};
       const cleaned = cleanPublicPayload(entity, payload, previousPayload);
@@ -312,7 +332,7 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
     const entity = normalizeEntity(requested);
     if (entity === "ContactInfo") throw errorWithStatus("Contact profile deletion is not supported", 405);
     if (entity === "AboutPage") throw errorWithStatus("The About page cannot be deleted; edit its sections instead", 405);
-    if (appearanceEntities.has(entity)) throw errorWithStatus("This configuration cannot be deleted; reset its settings instead", 405);
+    if (versionedConfigurations.has(entity)) throw errorWithStatus("This configuration cannot be deleted; reset its settings instead", 405);
     if (entity !== "Consultation" && !publicFields[entity]) throw errorWithStatus("Unsupported content entity", 400);
     return transaction(async (connection) => {
       const [result] = entity === "Consultation"

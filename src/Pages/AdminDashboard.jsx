@@ -34,6 +34,7 @@ const CARDS = [
   { key: 'AdminUsers', title: 'User Management', description: 'Verify emails and assign Admin/Super roles', icon: 'UserCog', color: 'bg-[var(--primary-dark)]' },
   { key: 'AdminAccessControl', title: 'Super User Access', description: 'Choose which sections Super Users can edit', icon: 'ShieldCheck', color: 'bg-[var(--primary)]' },
   { key: 'AdminIcons', title: 'Website Icons', description: 'Choose consistent icons for the website and dashboard', icon: 'Sparkles', color: 'bg-[var(--accent)]' },
+  { key: 'AdminNavigation', title: 'Website Tabs', description: 'Add, rename, reorder, show or hide links to existing website pages', icon: 'FolderOpen', color: 'bg-[var(--primary)]' },
 ];
 const CARD_BY_KEY = new Map(CARDS.map((card) => [card.key, card]));
 const DRAG_TYPE = 'application/x-d16-dashboard-card';

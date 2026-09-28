@@ -2,6 +2,7 @@ import { IS_DEMO, createApiEntity, requestJson } from './transport.js';
 import { LIVE_SERVICES, LIVE_CONCEPTS } from '../data/liveContent.js';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../data/siteAppearance.js';
+import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, validateNavigationItems } from '../data/navigation.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
@@ -299,6 +300,27 @@ const servicesStore = createStore(LIVE_SERVICES, 'd16_services');
 const aboutPageStore = createStore([{ ...DEFAULT_ABOUT, id: ABOUT_PAGE_ID }], 'd16_about_page');
 const dashboardLayoutStore = createStore([{ ...DEFAULT_DASHBOARD_LAYOUT, id: DASHBOARD_LAYOUT_ID }], 'd16_dashboard_layout');
 const websiteIconsStore = createStore([{ ...DEFAULT_WEBSITE_ICONS, id: WEBSITE_ICONS_ID }], 'd16_website_icons');
+const navigationMenuStore = createStore([{ ...DEFAULT_NAVIGATION_MENU, id: NAVIGATION_MENU_ID, version: 1 }], 'd16_navigation_menu');
+const navigationMenuClient = {
+  async list() {
+    return (await navigationMenuStore.list()).map((record) => ({ ...record, version: Number.isSafeInteger(record.version) && record.version > 0 ? record.version : 1 }));
+  },
+  async create(payload) {
+    // Seeded demo configuration is always a singleton, including after all links
+    // have intentionally been removed. Never create a second menu record.
+    const [saved] = await navigationMenuStore.list();
+    if (saved) throw new Error('Website tabs already exist. Reload the saved version before editing.');
+    return navigationMenuStore.create({ title: DEFAULT_NAVIGATION_MENU.title, items: validateNavigationItems(payload.items) });
+  },
+  async update(id, payload) {
+    const saved = (await navigationMenuClient.list()).find((record) => record.id === id);
+    if (!saved) throw new Error('Website tabs were not found. Reload the saved version.');
+    if (!Number.isSafeInteger(payload.version) || payload.version < 1) throw Object.assign(new Error('Reload the saved website tabs before saving.'), { status: 400 });
+    if (payload.version !== saved.version) throw Object.assign(new Error('Website tabs changed in another preview tab. Reload before saving.'), { status: 409 });
+    return navigationMenuStore.update(id, { title: DEFAULT_NAVIGATION_MENU.title, items: validateNavigationItems(payload.items), version: saved.version + 1 });
+  },
+  async delete() { throw new Error('Remove individual tabs or reset the menu instead.'); },
+};
 const picYourConceptStore = createStore(LIVE_CONCEPTS, 'd16_pic_your_concept');
 const usersStore = createStore([], 'd16_demo_users');
 const demoUser = { id: 'demo-preview', name: 'Local preview', role: 'admin', permissions: [] };
@@ -340,6 +362,7 @@ const demoClient = {
     },
   },
   entities: {
+    NavigationMenu: navigationMenuClient,
     DashboardLayout: dashboardLayoutStore,
     WebsiteIcons: websiteIconsStore,
     AboutPage: aboutPageStore,
@@ -358,7 +381,7 @@ const demoClient = {
   },
 }
 
-const endpoints = { DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
+const endpoints = { NavigationMenu: 'navigation-menu', DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
 const realClient = {
   entities: { ...Object.fromEntries(Object.entries(endpoints).map(([name, path]) => [name, createApiEntity(path)])), AccessControl: createApiEntity('access-control') },
   auth: {

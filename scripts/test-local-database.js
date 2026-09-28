@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import mysql from 'mysql2/promise';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../src/data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../src/data/siteAppearance.js';
+import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU } from '../src/data/navigation.js';
 
 const container = `d16-sync-test-${randomUUID().slice(0, 8)}`;
 const password = randomBytes(32).toString('base64url');
@@ -40,6 +41,7 @@ try {
   const appearanceFixtures = [
     ['DashboardLayout', DASHBOARD_LAYOUT_ID, DEFAULT_DASHBOARD_LAYOUT, { ...DEFAULT_DASHBOARD_LAYOUT, card_order: ['AdminIcons', 'AdminAbout'] }],
     ['WebsiteIcons', WEBSITE_ICONS_ID, DEFAULT_WEBSITE_ICONS, { ...DEFAULT_WEBSITE_ICONS, icons: { 'values.budget': { icon_name: 'Wallet', icon_url: '' } } }],
+    ['NavigationMenu', NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, { ...DEFAULT_NAVIGATION_MENU, items: [] }],
   ];
   for (const [entity, id, defaults, editedPayload] of appearanceFixtures) {
     const [[seededConfig]] = await database.query('SELECT payload FROM app_content WHERE entity_type=? AND id=?', [entity, id]);
@@ -60,7 +62,7 @@ try {
     const [[retainedConfig]] = await database.query('SELECT payload FROM app_content WHERE entity_type=? AND id=?', [entity, id]);
     assert.deepEqual(typeof retainedConfig.payload === 'string' ? JSON.parse(retainedConfig.payload) : retainedConfig.payload, editedPayload);
   }
-  console.log('PASS: fresh schema and repeatable additive migrations retain edited About/appearance content and revoked grants');
+  console.log('PASS: fresh schema and repeatable additive migrations retain edited About/appearance content, empty navigation and revoked grants');
 
   delete process.env.API_ENV_FILE;
   delete process.env.DB_SOCKET_PATH;
@@ -105,9 +107,12 @@ try {
 
   assert.equal((await request('/dashboard-layout', 'GET', undefined, '')).status, 401);
   assert.equal((await request('/website-icons', 'GET', undefined, '')).status, 200);
+  assert.equal((await request('/navigation-menu', 'GET', undefined, '')).status, 200);
+  assert.deepEqual((await request('/navigation-menu', 'GET', undefined, '')).body[0].items, []);
   for (const [endpoint, entity, id, field, value] of [
     ['/dashboard-layout', 'DashboardLayout', DASHBOARD_LAYOUT_ID, 'card_order', ['AdminAbout', 'AdminIcons']],
     ['/website-icons', 'WebsiteIcons', WEBSITE_ICONS_ID, 'icons', { 'values.budget': { icon_name: 'Star', icon_url: '' }, 'about.mission': { icon_name: 'Image', icon_url: '/uploads/test-icon.webp' } }],
+    ['/navigation-menu', 'NavigationMenu', NAVIGATION_MENU_ID, 'items', [...DEFAULT_NAVIGATION_MENU.items].reverse().map((item, index) => index ? item : { ...item, label: 'Get in touch', visible: false })],
   ]) {
     const current = (await request(endpoint)).body[0];
     assert.equal(current.id, id);
@@ -119,7 +124,7 @@ try {
     assert.equal((await request(`${endpoint}/${id}`, 'PUT', { ...current, [field]: value })).status, 409);
     assert.equal((await request(endpoint, 'POST', { ...current, [field]: value })).status, 409);
     assert.equal((await request(`${endpoint}/${id}`, 'DELETE', {})).status, 405);
-    const invalid = entity === 'DashboardLayout' ? ['AdminAbout', 'AdminAbout'] : { 'values.budget': { icon_name: 'PiggyBank', icon_url: '' } };
+    const invalid = entity === 'DashboardLayout' ? ['AdminAbout', 'AdminAbout'] : entity === 'NavigationMenu' ? [DEFAULT_NAVIGATION_MENU.items[0], DEFAULT_NAVIGATION_MENU.items[0]] : { 'values.budget': { icon_name: 'PiggyBank', icon_url: '' } };
     assert.equal((await request(`${endpoint}/${id}`, 'PUT', { ...editedConfig.body, [field]: invalid })).status, 400);
     const concurrent = await Promise.all([
       request(`${endpoint}/${id}`, 'PUT', { ...editedConfig.body, title: 'First concurrent editor' }),
@@ -135,8 +140,15 @@ try {
     const failingAppearance = content.createContentRepository({ database: pool, audit: async () => { throw new Error('synthetic appearance audit failure'); } });
     await assert.rejects(failingAppearance.updateContent(entity, id, { ...beforeFailure, title: 'Must roll back appearance' }, { userId: admin.id }), /audit failure/);
     assert.deepEqual((await request(endpoint)).body[0], beforeFailure);
+    if (entity === 'NavigationMenu') {
+      const emptied = await request(`${endpoint}/${id}`, 'PUT', { ...beforeFailure, items: [] });
+      assert.equal(emptied.status, 200);
+      assert.deepEqual((await request(endpoint, 'GET', undefined, '')).body[0].items, []);
+      await database.query(readFileSync('database/migrations/005_navigation.sql', 'utf8'));
+      assert.deepEqual((await request(endpoint, 'GET', undefined, '')).body[0].items, []);
+    }
   }
-  console.log('PASS: shared dashboard/icon persistence, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
+  console.log('PASS: shared dashboard/icon/navigation persistence, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
 
   const about = (await request('/about-page', 'GET', undefined, '')).body[0];
   assert.equal(about.id, ABOUT_PAGE_ID);
@@ -161,7 +173,7 @@ try {
   assert.equal(superLogin.status, 200);
   const superCookie = superLogin.response.headers.get('set-cookie').split(';')[0];
   assert.equal((await request('/dashboard-layout', 'GET', undefined, superCookie)).status, 403);
-  for (const [endpoint, id] of [['/dashboard-layout', DASHBOARD_LAYOUT_ID], ['/website-icons', WEBSITE_ICONS_ID]]) {
+  for (const [endpoint, id] of [['/dashboard-layout', DASHBOARD_LAYOUT_ID], ['/website-icons', WEBSITE_ICONS_ID], ['/navigation-menu', NAVIGATION_MENU_ID]]) {
     assert.equal((await request(endpoint, 'POST', { title: 'Denied Super configuration' }, superCookie)).status, 403);
     assert.equal((await request(`${endpoint}/${id}`, 'PUT', { title: 'Denied Super configuration' }, superCookie)).status, 403);
   }

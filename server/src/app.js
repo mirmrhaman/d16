@@ -18,8 +18,9 @@ const routes = [
   ['gallery-concepts', 'GalleryConcept', 'content.write'], ['pic-your-concept', 'PicYourConcept', 'content.write'],
   ['about-page', 'AboutPage', 'content.write'],
   ['dashboard-layout', 'DashboardLayout', 'branding.write'], ['website-icons', 'WebsiteIcons', 'branding.write'],
+  ['navigation-menu', 'NavigationMenu', 'branding.write'],
 ];
-const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons']);
+const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons', 'NavigationMenu']);
 const entitySections = { HeroSlide: 'HeroSlides', Stats: 'Stats', Service: 'Services', Project: 'Projects', BlogPost: 'Blog', GalleryVideo: 'Gallery', GalleryConcept: 'Gallery', PicYourConcept: 'PicYourConcept', AboutPage: 'About' };
 const unavailableCodes = new Set(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'ER_ACCESS_DENIED_ERROR', 'ER_NO_SUCH_TABLE']);
 

@@ -55,5 +55,6 @@ export const STATIC_ICON_SLOTS = [
     ['dashboard.AdminUsers', 'User Management', 'UserCog'],
     ['dashboard.AdminAccessControl', 'Super User Access', 'ShieldCheck'],
     ['dashboard.AdminIcons', 'Website Icons', 'Sparkles'],
+    ['dashboard.AdminNavigation', 'Website Tabs', 'FolderOpen'],
   ]),
 ];

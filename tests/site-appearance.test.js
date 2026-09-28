@@ -8,7 +8,8 @@ test('website icon registry has unique locations and approved non-animal default
   for (const slot of STATIC_ICON_SLOTS) assert(ICON_NAMES.includes(slot.icon), slot.key);
   assert.equal(STATIC_ICON_SLOTS.find((slot) => slot.key === 'values.budget').icon, 'Wallet');
   assert(!ICON_NAMES.some((name) => /pig/i.test(name)));
-  assert.equal(STATIC_ICON_SLOTS.filter((slot) => slot.group === 'Admin Dashboard').length, 18);
+  assert.equal(STATIC_ICON_SLOTS.filter((slot) => slot.group === 'Admin Dashboard').length, 19);
+  assert.equal(STATIC_ICON_SLOTS.find((slot) => slot.key === 'dashboard.AdminNavigation').label, 'Website Tabs');
   assert.deepEqual(DEFAULT_DASHBOARD_LAYOUT.card_order, []);
   assert.deepEqual(DEFAULT_WEBSITE_ICONS.icons, {});
 });

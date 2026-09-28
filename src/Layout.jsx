@@ -9,9 +9,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQ
 import { useAuth } from "@/context/AuthContext";
 import { adminLanding } from '@/api/permissions';
 import { IS_DEMO } from '@/api/transport';
+import { base44 } from '@/api/base44Client';
+import { NAVIGATION_MENU_ID, visibleNavigationItems } from '@/data/navigation';
 
 const DEFAULT_THEME_COLOR = "#112037";
 const DEFAULT_LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690395669c778d5c32d51682/5ac5acb53_image.png";
+const NAVIGATION_ICONS = { Home, Users, Briefcase, FolderOpen, Images, BookOpen, Mail };
 
 const normalizeHex = (value) => {
   if (!value || typeof value !== "string") return "";
@@ -53,6 +56,29 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { user, logout, authError } = useAuth();
   const queryClient = useQueryClient();
+  const { data: navigationRecords } = useQuery({
+    queryKey: ['navigationMenu'],
+    queryFn: () => base44.entities.NavigationMenu.list(),
+    staleTime: 30000,
+  });
+  const navigationRecord = navigationRecords?.find((record) => record.id === NAVIGATION_MENU_ID) || navigationRecords?.[0];
+  const navigationItems = visibleNavigationItems(navigationRecord?.items).map((item) => ({
+    ...item, title: item.label, url: item.path, icon: NAVIGATION_ICONS[item.icon] || Home,
+  }));
+  const showConsultationLink = navigationItems.some((item) => item.page === 'Contact');
+
+  useEffect(() => {
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ['navigationMenu'] });
+    const onStorage = (event) => {
+      if (IS_DEMO && event.key === 'd16_navigation_menu_demo_v2') refresh();
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('d16-navigation-refresh', refresh);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('d16-navigation-refresh', refresh);
+    };
+  }, [queryClient]);
 
   // Fetch contact info
   const { data: contactInfo = [] } = useQuery({
@@ -123,18 +149,7 @@ export default function Layout({ children }) {
     document.title = 'D16';
   }, [brandingNonce]);
 
-  const navigationItems = [
-    { title: "Home", url: createPageUrl("Home"), icon: Home },
-    { title: "About", url: createPageUrl("About"), icon: Users },
-    { title: "Services", url: createPageUrl("Services"), icon: Briefcase },
-    { title: "Portfolio", url: createPageUrl("Portfolio"), icon: FolderOpen },
-    { title: "Pic Your Concept", url: createPageUrl("PicYourConcept"), icon: Images },
-    { title: "Gallery", url: createPageUrl("Gallery"), icon: Images },
-    { title: "Blog", url: createPageUrl("Blog"), icon: BookOpen },
-    { title: "Contact", url: createPageUrl("Contact"), icon: Mail },
-  ];
-
-  const isActive = (url) => location.pathname === url;
+  const isActive = (url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(`${url}/`));
 
   return (
     <div className="min-h-screen bg-white">
@@ -185,12 +200,14 @@ export default function Layout({ children }) {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden xl:flex items-center space-x-5">
+            <nav aria-label="Main navigation" className="hidden xl:flex min-w-0 items-center space-x-5 ml-5">
               {navigationItems.map((item) => (
                 <Link
-                  key={item.title}
+                  key={item.id}
                   to={item.url}
-                  className={`text-sm font-medium tracking-wide transition-colors duration-300 ${
+                  title={item.title}
+                  aria-current={isActive(item.url) ? 'page' : undefined}
+                  className={`min-w-0 max-w-32 truncate text-sm font-medium tracking-wide transition-colors duration-300 ${
                     isActive(item.url)
                       ? 'text-[var(--accent)]'
                       : 'text-gray-200 hover:text-white'
@@ -221,13 +238,13 @@ export default function Layout({ children }) {
                   <Button variant="outline">Login</Button>
                 </Link>
               )}
-              <Link to={createPageUrl("Contact")}>
+              {showConsultationLink && <Link to={createPageUrl("Contact")}>
                 <Button 
                   className="bg-[var(--accent)] hover:bg-[var(--primary)] text-white hover:shadow-lg transition-all duration-300"
                 >
                   Book Consultation
                 </Button>
-              </Link>
+              </Link>}
             </nav>
 
             {/* Mobile Menu Button */}
@@ -244,12 +261,13 @@ export default function Layout({ children }) {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="xl:hidden bg-[var(--primary-dark)] border-t border-white/10">
-            <nav className="px-4 py-4 space-y-3">
+          <div className="xl:hidden max-h-[calc(100dvh-5rem)] overflow-y-auto bg-[var(--primary-dark)] border-t border-white/10">
+            <nav aria-label="Mobile navigation" className="px-4 py-4 space-y-3">
               {navigationItems.map((item) => (
                 <Link
-                  key={item.title}
+                  key={item.id}
                   to={item.url}
+                  aria-current={isActive(item.url) ? 'page' : undefined}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive(item.url)
@@ -257,8 +275,8 @@ export default function Layout({ children }) {
                       : 'text-gray-200 hover:bg-white/5'
                   }`}
                 >
-                  <item.icon size={20} />
-                  <span className="font-medium">{item.title}</span>
+                  <item.icon size={20} className="shrink-0" aria-hidden="true" />
+                  <span className="font-medium break-words min-w-0">{item.title}</span>
                 </Link>
               ))}
               {isAdmin && (
@@ -291,11 +309,11 @@ export default function Layout({ children }) {
               >
                 {user ? 'Logout' : <Link to="/login">Login</Link>}
               </Button>
-              <Link to={createPageUrl("Contact")} onClick={() => setMobileMenuOpen(false)}>
+              {showConsultationLink && <Link to={createPageUrl("Contact")} onClick={() => setMobileMenuOpen(false)}>
                 <Button className="w-full bg-[var(--accent)] hover:bg-[var(--primary)] text-white">
                   Book Consultation
                 </Button>
-              </Link>
+              </Link>}
             </nav>
           </div>
         )}
@@ -344,21 +362,21 @@ export default function Layout({ children }) {
             </div>
 
             {/* Quick Links */}
-            <div>
+            <nav aria-label="Footer navigation">
               <h4 className="text-lg font-semibold mb-6 text-[var(--accent-light)]">Quick Links</h4>
               <ul className="space-y-3">
                 {navigationItems.map((item) => (
-                  <li key={item.title}>
+                  <li key={item.id}>
                     <Link
                       to={item.url}
-                      className="text-gray-300 hover:text-white transition-colors duration-300"
+                      className="break-words text-gray-300 hover:text-white transition-colors duration-300"
                     >
                       {item.title}
                     </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
 
             {/* Locations */}
             <div>

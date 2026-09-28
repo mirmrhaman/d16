@@ -25,6 +25,7 @@ import Gallery from "./Pages/Gallery";
 import About from "./Pages/About";
 import AdminAbout from "./Pages/AdminAbout";
 import AdminIcons from "./Pages/AdminIcons";
+import AdminNavigation from "./Pages/AdminNavigation";
 import Blog from "./Pages/Blog";
 import Contact from "./Pages/Contact";
 import Login from "./Pages/Login";
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/About" element={<Layout><About /></Layout>} />
       <Route path="/AdminAbout" element={<RequireAuth allowedRoles={['admin', 'super']} featureKey="About"><Layout><AdminAbout /></Layout></RequireAuth>} />
       <Route path="/AdminIcons" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminIcons /></Layout></RequireAuth>} />
+      <Route path="/AdminNavigation" element={<RequireAuth allowedRoles={['admin']}><Layout><AdminNavigation /></Layout></RequireAuth>} />
       <Route path="/Blog" element={<Layout><Blog /></Layout>} />
       <Route path="/Blog/:postId" element={<Layout><BlogDetail /></Layout>} />
       <Route path="/Contact" element={<Layout><Contact /></Layout>} />

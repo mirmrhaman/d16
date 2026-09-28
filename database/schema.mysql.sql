@@ -6,6 +6,10 @@
 -- * Store all DATETIME values in UTC; this replaces PostgreSQL TIMESTAMPTZ.
 -- * Encrypt *_ciphertext values in the application with a KMS-managed key.
 -- * Do not store plaintext passwords, session tokens, or OTP codes.
+-- * For a fresh installation, apply database/migrations/001 through 005 after
+--   this native schema. The CMS navigation lives in app_content, initialized by
+--   001_secure_content.sql and seeded by 005_navigation.sql; no duplicate table
+--   is needed. Existing installations should apply only pending migrations.
 
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';

@@ -3,6 +3,7 @@
 In the client preview, open **Login → Open sample admin preview → Social Media**. In the database application, sign in with an administrator account that has branding permission.
 
 1. Add the client's platform name (for example, WhatsApp, Facebook or YouTube) and its public HTTP(S) link. Use the client's own destinations; the application does not invent phone numbers or profiles.
+   The field suggests supported platforms and displays the matching icon immediately. WhatsApp uses the phone-in-chat brand symbol. X and the older `twitter` key both display X. Facebook, Instagram, YouTube, LinkedIn, Messenger and Telegram use their brand glyphs; `website` uses a globe. Unknown/custom platforms use a generic link symbol. Icon recognition is presentation-only; it does not rewrite saved profile keys or destination URLs.
 2. Enable **Show floating media buttons** and choose the left or right side.
 3. Select **Keep [platform] visible while scrolling** for each link to display. Select one or several, then use Up/Down to change their displayed order.
 4. Save the changes and visit a public page. Selected links stay at the bottom corner while scrolling, on desktop and phones. Each opens its destination in a new tab. Admin and login pages hide these buttons to keep editors clear.

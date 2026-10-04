@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_NAVIGATION_MENU, NAVIGATION_MENU_ID as CLIENT_NAVIGATION_ID, NAVIGATION_PAGES, validateNavigationItems } from '../src/data/navigation.js';
+import { DEFAULT_NAVIGATION_MENU, NAVIGATION_MENU_ID as CLIENT_NAVIGATION_ID, NAVIGATION_PAGES, MAX_NAVIGATION_ITEMS, validateNavigationItems, validateNavigationSettings } from '../src/data/navigation.js';
 
 // Synthetic configuration only; never load a real environment file or database.
 Object.assign(process.env, {
@@ -51,16 +51,51 @@ test('navigation defaults match frontend, preserve order and intentional empty m
 test('navigation rejects unsafe fields, duplicate pages or IDs, malformed labels and non-booleans', () => {
   const item = DEFAULT_NAVIGATION_MENU.items[0];
   const validate = (items) => cleanPublicPayload('NavigationMenu', { title: 'Website navigation', items });
-  for (const items of [null, {}, 'Home', Array(41).fill(item)]) assert.throws(() => validate(items), /at most (40|forty)/);
+  for (const items of [null, {}, 'Home', Array(MAX_NAVIGATION_ITEMS + 1).fill(item)]) assert.throws(() => validate(items), /at most 250|Too many content items/);
   for (const id of ['', 'contains space', '../Home', 'a'.repeat(65), 123, null]) assert.throws(() => validate([{ ...item, id }]), /valid IDs/);
   assert.throws(() => validate([item, { ...item, page: 'About' }]), /valid IDs/);
   assert.throws(() => validate([item, { ...item, id: 'different-id' }]), /supported pages/);
   for (const page of ['AdminDashboard', 'https://example.test', 'javascript:alert(1)', '/About', 'home', null]) assert.throws(() => validate([{ ...item, page }]), /supported pages/);
   for (const label of ['', '   ', 'a'.repeat(61), '\nHome', 'Home\u007f', 123]) assert.throws(() => validate([{ ...item, label }]), /labels/);
   for (const visible of [undefined, null, 'true', 'false', 0, 1, {}]) assert.throws(() => validate([{ ...item, visible }]), /boolean/);
+  for (const in_dropdown of [undefined, null, 'true', 'false', 0, 1, {}]) assert.throws(() => validate([{ ...item, in_dropdown }]), /boolean/);
   assert.throws(() => validate([{ ...item, url: 'https://example.test' }]), /accept only/);
   assert.throws(() => validate([{ ...item, password: 'never store' }]), /Private fields/);
   assert.throws(() => validate([JSON.parse('{"id":"nav-home","page":"Home","label":"Home","visible":true,"__proto__":{}}')]), /Private fields/);
+});
+
+test('server and client validate settings and menus beyond forty tabs consistently', () => {
+  const legacy = { title: 'Legacy menu', items: [{ id: 'home', page: 'Home', label: 'Home', visible: true }] };
+  const normalized = cleanPublicPayload('NavigationMenu', legacy);
+  assert.equal(normalized.items[0].in_dropdown, false);
+  assert.deepEqual(validateNavigationSettings(normalized), { dropdown_enabled: false, dropdown_label: 'More' });
+  const items = Array.from({ length: MAX_NAVIGATION_ITEMS }, (_, index) => ({ id: `nav-${index}`, page: `custom:10000000-0000-4000-8000-${String(index).padStart(12, '0')}`, label: `Page ${index + 1}`, visible: true, in_dropdown: index % 3 === 0 }));
+  const configured = cleanPublicPayload('NavigationMenu', { ...legacy, items, dropdown_enabled: true, dropdown_label: '  Discover  ' });
+  assert.deepEqual(configured.items, validateNavigationItems(items));
+  assert.equal(configured.items.length, 250);
+  assert.equal(configured.dropdown_label, 'Discover');
+  const partial = cleanPublicPayload('NavigationMenu', { dropdown_label: 'Explore' }, configured);
+  assert.deepEqual(partial.items, configured.items); assert.equal(partial.dropdown_enabled, true);
+  for (const dropdown_enabled of [undefined, null, 0, 1, 'true', {}]) assert.throws(() => cleanPublicPayload('NavigationMenu', { ...legacy, dropdown_enabled }), /boolean/);
+  for (const dropdown_label of [undefined, null, '', ' ', 'x'.repeat(61), 'a\nb', 'a\u007f', 1, {}]) assert.throws(() => cleanPublicPayload('NavigationMenu', { ...legacy, dropdown_label }));
+});
+
+test('settings-only edits preserve placement, require current versions and retain attributed atomic audits', async () => {
+  const database = memoryDatabase(); const repository = createContentRepository({ database });
+  const original = await repository.createContent('NavigationMenu', { ...DEFAULT_NAVIGATION_MENU, items: DEFAULT_NAVIGATION_MENU.items.map((item, index) => ({ ...item, in_dropdown: index % 2 === 0 })) }, actor);
+  const enabled = await repository.updateContent('NavigationMenu', original.id, { version: original.version, dropdown_enabled: true, dropdown_label: 'Explore' }, actor);
+  assert.deepEqual(enabled.items, original.items);
+  assert.equal(enabled.dropdown_enabled, true); assert.equal(enabled.dropdown_label, 'Explore');
+  assert.deepEqual(JSON.parse(database.state.audits.at(-1).values[5]).changed_fields, ['dropdown_enabled', 'dropdown_label']);
+  assert.equal(database.state.audits.at(-1).values[1], actor.userId);
+  await assert.rejects(repository.updateContent('NavigationMenu', original.id, { version: original.version, dropdown_label: 'Stale' }, actor), (error) => error.status === 409);
+  const renamed = await repository.updateContent('NavigationMenu', original.id, { version: enabled.version, dropdown_label: 'Discover' }, actor);
+  assert.deepEqual(renamed.items, original.items); assert.equal(renamed.dropdown_enabled, true);
+  assert.deepEqual(JSON.parse(database.state.audits.at(-1).values[5]).changed_fields, ['dropdown_label']);
+  assert.deepEqual((await repository.listContent('NavigationMenu'))[0], renamed);
+  database.state.failAudit = true;
+  await assert.rejects(repository.updateContent('NavigationMenu', original.id, { version: renamed.version, dropdown_enabled: false }, actor), /audit unavailable/);
+  assert.deepEqual((await repository.listContent('NavigationMenu'))[0], renamed);
 });
 
 test('navigation singleton requires versions and logs genuine changes atomically', async () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, ExternalLink, FilePlus2, Plus, Save, Trash2 } from 'lucide-react';
@@ -66,12 +66,12 @@ function ImageField({ label, value, onChange, onUpload }) {
   </div>;
 }
 
-export default function CustomPageManager({ onAddToMenu, menuPages = [] }) {
+export default function CustomPageManager({ onAddToMenu, menuPages = [], newPageRequest = null }) {
   const { user } = useAuth();
-  return <PageManager key={user?.id || 'signed-out'} userId={user?.id} onAddToMenu={onAddToMenu} menuPages={menuPages} />;
+  return <PageManager key={user?.id || 'signed-out'} userId={user?.id} onAddToMenu={onAddToMenu} menuPages={menuPages} newPageRequest={newPageRequest} />;
 }
 
-function PageManager({ userId, onAddToMenu, menuPages }) {
+function PageManager({ userId, onAddToMenu, menuPages, newPageRequest }) {
   const queryClient = useQueryClient();
   const [restored] = useState(() => userId ? queryClient.getQueryData(['customPageDraft', userId]) : null);
   const [draft, setDraft] = useState(() => restored ? clone(restored.draft) : null);
@@ -86,6 +86,8 @@ function PageManager({ userId, onAddToMenu, menuPages }) {
   const editorRef = useRef(null);
   const confirmRef = useRef(null);
   const mounted = useRef(true);
+  const seenNewPageRequests = useRef(new Set());
+  const pendingNewPageRequests = useRef([]);
   const dirty = draft !== null && !same(draft, baseline);
   const query = useQuery({ queryKey: ADMIN_KEY, queryFn: async () => readPages(await base44.entities.CustomPage.list({ admin: true })), staleTime: 30000 });
   let pages = [];
@@ -108,29 +110,24 @@ function PageManager({ userId, onAddToMenu, menuPages }) {
     }
   }, [confirmation]);
 
-  const cacheDraft = (next, nextRecord = record, nextBaseline = baseline) => {
+  const cacheDraft = useCallback((next, nextRecord = record, nextBaseline = baseline) => {
     const key = ['customPageDraft', userId];
     if (userId && next !== null && !same(next, nextBaseline)) {
       queryClient.setQueryDefaults(key, { gcTime: Infinity });
       queryClient.setQueryData(key, { draft: clone(next), record: clone(nextRecord), baseline: clone(nextBaseline) });
     } else queryClient.removeQueries({ queryKey: key, exact: true });
-  };
-  const clearNotice = () => { setError(''); setStatus(''); setConfirmation(null); };
-  const selectDraft = (next, nextRecord, nextBaseline) => {
+  }, [userId, queryClient, record, baseline]);
+  const clearNotice = useCallback(() => { setError(''); setStatus(''); setConfirmation(null); }, []);
+  const selectDraft = useCallback((next, nextRecord, nextBaseline) => {
     cacheDraft(next, nextRecord, nextBaseline);
     setDraft(next); setRecord(nextRecord); setBaseline(nextBaseline); clearNotice();
     requestAnimationFrame(() => { editorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); editorRef.current?.focus({ preventScroll: true }); });
-  };
-  const performAction = (action) => {
+  }, [cacheDraft, clearNotice]);
+  const performAction = useCallback((action) => {
     if (action.kind === 'new') selectDraft(createCustomPage(action.pageType), null, null);
     if (action.kind === 'edit') { const next = contentOf(action.page); selectDraft(next, action.page, clone(next)); }
     if (action.kind === 'close') selectDraft(null, null, null);
-  };
-  const requestAction = (action) => {
-    if (busy) return;
-    if (dirty) setConfirmation(action);
-    else performAction(action);
-  };
+  }, [selectDraft]);
   const changeDraft = (next, message = '') => {
     cacheDraft(next); setDraft(next); clearNotice(); setStatus(message);
   };
@@ -171,6 +168,28 @@ function PageManager({ userId, onAddToMenu, menuPages }) {
     },
   });
   const busy = save.isPending || Boolean(uploading) || reloading;
+  const requestAction = useCallback((action) => {
+    if (busy) return;
+    if (dirty) setConfirmation(action);
+    else performAction(action);
+  }, [busy, dirty, performAction]);
+  // Add Tab may request a page while a save/upload is still finishing. Keep
+  // every distinct request until the editor is ready, and use the same draft
+  // confirmation as Create New Page instead of replacing unsaved content.
+  useEffect(() => {
+    if (typeof newPageRequest?.id === 'string' && newPageRequest.id && !seenNewPageRequests.current.has(newPageRequest.id)) {
+      seenNewPageRequests.current.add(newPageRequest.id);
+      pendingNewPageRequests.current.push({ kind: 'new', pageType: newPageRequest.pageType });
+    }
+    if (busy || query.isPending || loadError || confirmation || pendingNewPageRequests.current.length === 0) return;
+    const action = pendingNewPageRequests.current.shift();
+    if (!PAGE_TYPES.some((type) => type.value === action.pageType)) {
+      setError('Choose a supported page type, then select Add Tab again.');
+      return;
+    }
+    setNewType(action.pageType);
+    requestAction(action);
+  }, [newPageRequest, busy, query.isPending, loadError, confirmation, requestAction]);
   useEffect(() => {
     if (!dirty && !busy) return;
     const warn = (event) => { event.preventDefault(); event.returnValue = ''; };

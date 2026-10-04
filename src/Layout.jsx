@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, Images, BookOpen, ChevronDown } from "lucide-react";
+import { Home, Briefcase, FolderOpen, Mail, Menu, X, Phone, MapPin, Settings, Users, Images, BookOpen, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { contactInfoClient } from "@/api/contactInfoClient";
 import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQuery
@@ -10,7 +10,9 @@ import { useAuth } from "@/context/AuthContext";
 import { adminLanding } from '@/api/permissions';
 import { IS_DEMO } from '@/api/transport';
 import { base44 } from '@/api/base44Client';
-import { NAVIGATION_MENU_ID, visibleNavigationItems } from '@/data/navigation';
+import { NAVIGATION_MENU_ID, visibleNavigationItems, normalizeNavigationSettings, groupNavigationItems } from '@/data/navigation';
+import FloatingSocialLinks from '@/components/FloatingSocialLinks';
+import { normalizeSocialMedia } from '../server/src/socialMediaSchema.js';
 
 const DEFAULT_THEME_COLOR = "#112037";
 const DEFAULT_LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690395669c778d5c32d51682/5ac5acb53_image.png";
@@ -53,6 +55,13 @@ export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [brandingNonce, setBrandingNonce] = useState(Date.now());
+  const [headerHeight, setHeaderHeight] = useState(80);
+  const [navigationScroll, setNavigationScroll] = useState({ overflow: false, previous: false, next: false });
+  const headerRef = useRef(null);
+  const closedHeaderRef = useRef(null);
+  const mobileToggleRef = useRef(null);
+  const navigationScrollerRef = useRef(null);
+  const navigationTrackRef = useRef(null);
   const location = useLocation();
   const { user, logout, authError } = useAuth();
   const queryClient = useQueryClient();
@@ -71,8 +80,91 @@ export default function Layout({ children }) {
     ...item, title: item.label, url: item.path, icon: NAVIGATION_ICONS[item.icon] || Home,
   }));
   const showConsultationLink = navigationItems.some((item) => item.page === 'Contact');
-  const desktopItems = navigationItems.slice(0, 5);
-  const overflowItems = navigationItems.slice(5);
+  const navigationSettings = normalizeNavigationSettings(navigationRecord);
+  // Resolve visibility and published-page permissions before assigning groups.
+  const { directItems, dropdownItems } = groupNavigationItems(navigationItems, navigationSettings);
+  const directNavigationSignature = JSON.stringify(directItems, ['id', 'title']);
+
+  useLayoutEffect(() => {
+    const scroller = navigationScrollerRef.current;
+    const track = navigationTrackRef.current;
+    if (!scroller || !track) return undefined;
+    const measure = () => {
+      const remaining = scroller.scrollWidth - scroller.clientWidth;
+      const next = {
+        overflow: remaining > 1,
+        previous: scroller.scrollLeft > 1,
+        next: scroller.scrollLeft < remaining - 1,
+      };
+      setNavigationScroll((previous) => previous.overflow === next.overflow && previous.previous === next.previous && previous.next === next.next ? previous : next);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(scroller);
+    observer?.observe(track);
+    scroller.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      scroller.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [directNavigationSignature]);
+
+  const revealNavigationLink = (link) => {
+    const scroller = navigationScrollerRef.current;
+    if (!scroller || !link) return;
+    const viewport = scroller.getBoundingClientRect();
+    const item = link.getBoundingClientRect();
+    if (item.left < viewport.left) scroller.scrollLeft -= viewport.left - item.left;
+    else if (item.right > viewport.right) scroller.scrollLeft += item.right - viewport.right;
+  };
+
+  const scrollNavigation = (direction) => {
+    const scroller = navigationScrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({
+      left: direction * Math.max(120, scroller.clientWidth * 0.75),
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+  };
+
+  const navigateDirectTabs = (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const links = Array.from(navigationTrackRef.current?.querySelectorAll('a') || []);
+    const current = links.indexOf(event.target);
+    if (current < 0) return;
+    event.preventDefault();
+    const destination = event.key === 'Home' ? 0 : event.key === 'End' ? links.length - 1 : Math.max(0, Math.min(links.length - 1, current + (event.key === 'ArrowRight' ? 1 : -1)));
+    links[destination]?.focus({ preventScroll: true });
+    revealNavigationLink(links[destination]);
+  };
+
+  useLayoutEffect(() => {
+    const header = closedHeaderRef.current;
+    if (!header) return undefined;
+    const measure = () => setHeaderHeight(Math.ceil(header.getBoundingClientRect().height));
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    headerRef.current?.querySelectorAll('details[open]').forEach((details) => { details.open = false; });
+  }, [location.pathname]);
+
+  const closeDropdownOnEscape = (event) => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    event.currentTarget.open = false;
+    event.currentTarget.querySelector('summary')?.focus();
+  };
 
   useEffect(() => {
     const refresh = () => {
@@ -111,7 +203,7 @@ export default function Layout({ children }) {
     ? contact.locations
     : ['Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi'];
   // An intentionally empty social profile must stay empty after saving.
-  const socialLinks = Object.fromEntries(Object.entries(contact.social_links || {}).filter(([, url]) => typeof url === 'string' && /^https?:\/\//i.test(url)));
+  const socialLinks = normalizeSocialMedia(contact).social_links;
 
   useEffect(() => {
     // In this mock setup, admin and super roles both count for admin menu visibility
@@ -127,7 +219,7 @@ export default function Layout({ children }) {
     };
 
     const handleStorageRefresh = (event) => {
-      if (event.key === 'd16_branding_refresh') {
+      if (event.key === 'd16_branding_refresh' || (IS_DEMO && event.key === 'd16_contact_info_demo_v2')) {
         refreshBranding();
       }
     };
@@ -196,46 +288,55 @@ export default function Layout({ children }) {
       `}</style>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+      <header ref={headerRef} onKeyDown={(event) => {
+        if (event.key === 'Escape' && mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          mobileToggleRef.current?.focus();
+        }
+      }} className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] shadow-lg">
+        <div ref={closedHeaderRef} className="mx-auto w-full px-4 sm:px-6 lg:px-5 2xl:px-8">
+          <div className="flex h-20 flex-nowrap items-center justify-between gap-3 lg:gap-4">
             {/* Logo */}
-            <Link to={createPageUrl("Home")} className="flex items-center space-x-3 group">
+            <Link to={createPageUrl("Home")} className="flex shrink-0 items-center group">
               <img 
                 src={logoSrc}
                 alt="D16 Interior"
-                className="h-16 w-auto"
+                className="h-16 w-auto max-w-[10rem] object-contain"
                 style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
               />
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav aria-label="Main navigation" className="hidden xl:flex min-w-0 items-center space-x-5 ml-5">
-              {desktopItems.map((item) => (
-                <Link
-                  key={item.id}
-                  to={item.url}
-                  title={item.title}
-                  aria-current={isActive(item.url) ? 'page' : undefined}
-                  className={`min-w-0 max-w-32 truncate text-sm font-medium tracking-wide transition-colors duration-300 ${
-                    isActive(item.url)
-                      ? 'text-white underline underline-offset-8'
-                      : 'text-gray-200 hover:text-white'
-                  }`}
-                >
-                  {item.title}
-                </Link>
-              ))}
-              {overflowItems.length > 0 && <details className="relative shrink-0" onKeyDown={(event) => { if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
-                <summary className="flex cursor-pointer list-none items-center gap-1 rounded px-2 py-2 text-sm font-medium text-gray-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 [&::-webkit-details-marker]:hidden">More <ChevronDown size={16} aria-hidden="true" /></summary>
-                <div className="absolute right-0 top-full mt-3 max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-white/20 bg-[var(--primary-dark)] p-2 shadow-xl">
-                  {overflowItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={(event) => { event.currentTarget.closest('details').open = false; }} className={`block break-words rounded-lg px-4 py-3 text-sm text-white hover:bg-white/10 ${isActive(item.url) ? 'bg-white/10 font-semibold' : ''}`}>{item.title}</Link>)}
+            {/* Every direct tab stays on the same row; grouping is only the client's choice. */}
+            {(directItems.length > 0 || dropdownItems.length > 0) && <nav aria-label="Main navigation" className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
+              {directItems.length > 0 && <div className="flex min-w-0 flex-1 items-center gap-1">
+                {navigationScroll.overflow && <button type="button" aria-label="Previous navigation tabs" aria-controls="desktop-direct-navigation" disabled={!navigationScroll.previous} onClick={() => scrollNavigation(-1)} className="shrink-0 rounded p-1.5 text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 disabled:cursor-default disabled:opacity-30"><ChevronLeft size={18} aria-hidden="true" /></button>}
+                <div id="desktop-direct-navigation" ref={navigationScrollerRef} onKeyDown={navigateDirectTabs} onFocusCapture={(event) => revealNavigationLink(event.target.closest('a'))} className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div ref={navigationTrackRef} className="flex w-max min-w-full flex-nowrap items-center justify-center gap-1 xl:gap-2">
+                    {directItems.map((item) => <Link
+                      key={item.id}
+                      to={item.url}
+                      aria-current={isActive(item.url) ? 'page' : undefined}
+                      className={`shrink-0 whitespace-nowrap rounded px-1.5 py-3 text-sm font-medium transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] ${isActive(item.url) ? 'text-white underline underline-offset-4' : 'text-gray-200 hover:text-white'}`}
+                    >{item.title}</Link>)}
+                  </div>
+                </div>
+                {navigationScroll.overflow && <button type="button" aria-label="Next navigation tabs" aria-controls="desktop-direct-navigation" disabled={!navigationScroll.next} onClick={() => scrollNavigation(1)} className="shrink-0 rounded p-1.5 text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 disabled:cursor-default disabled:opacity-30"><ChevronRight size={18} aria-hidden="true" /></button>}
+              </div>}
+              {/* Keep the dropdown outside the clipped horizontal scroller. */}
+              {dropdownItems.length > 0 && <details className="relative ml-auto max-w-[10rem] shrink-0" onKeyDown={closeDropdownOnEscape}>
+                <summary title={navigationSettings.dropdown_label} className={`flex cursor-pointer list-none items-center gap-1 rounded px-2 py-3 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 truncate">{navigationSettings.dropdown_label}</span><ChevronDown size={16} className="shrink-0" aria-hidden="true" /></summary>
+                <div style={{ maxHeight: `max(6rem, calc(100dvh - ${headerHeight}px - 1rem))` }} className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-white/20 bg-[var(--primary-dark)] p-2 shadow-xl">
+                  {dropdownItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={(event) => { event.currentTarget.closest('details').open = false; }} className={`block break-words [overflow-wrap:anywhere] rounded-lg px-4 py-3 text-sm text-white hover:bg-white/10 ${isActive(item.url) ? 'bg-white/10 font-semibold' : ''}`}>{item.title}</Link>)}
                 </div>
               </details>}
+            </nav>}
+
+            {/* Account actions do not force website tabs into an automatic group. */}
+            <nav aria-label="Account actions" className="hidden shrink-0 items-center gap-2 lg:flex">
               {isAdmin && (
                 <Link
                   to={adminLanding(user, IS_DEMO)}
-                  className={`shrink-0 text-sm font-medium tracking-wide transition-colors duration-300 flex items-center gap-2 ${
+                  className={`shrink-0 whitespace-nowrap text-sm font-medium transition-colors duration-300 flex items-center gap-1 ${
                     isActive(adminLanding(user, IS_DEMO))
                       ? 'text-[var(--accent)]'
                       : 'text-gray-200 hover:text-white'
@@ -246,17 +347,17 @@ export default function Layout({ children }) {
                 </Link>
               )}
               {user ? (
-                <Button variant="outline" className="shrink-0 whitespace-nowrap" onClick={logout}>
-                  Logout ({user.role})
+                <Button variant="outline" className="shrink-0 whitespace-nowrap px-3" onClick={logout} title={`Logout (${user.role})`}>
+                  Logout
                 </Button>
               ) : (
                 <Link to="/login">
-                  <Button variant="outline">Login</Button>
+                  <Button variant="outline" className="px-3">Login</Button>
                 </Link>
               )}
               {showConsultationLink && <Link to={createPageUrl("Contact")}>
                 <Button 
-                  className="bg-[var(--accent)] hover:bg-[var(--primary)] text-white hover:shadow-lg transition-all duration-300"
+                  className="whitespace-nowrap bg-[var(--accent)] px-3 text-white hover:bg-[var(--primary)] hover:shadow-lg transition-all duration-300"
                 >
                   Book Consultation
                 </Button>
@@ -265,10 +366,12 @@ export default function Layout({ children }) {
 
             {/* Mobile Menu Button */}
             <button
+              ref={mobileToggleRef}
               aria-label={mobileMenuOpen ? 'Close navigation' : 'Open navigation'}
               aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-navigation"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="xl:hidden p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
+              className="lg:hidden shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors text-white"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -277,9 +380,9 @@ export default function Layout({ children }) {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="xl:hidden max-h-[calc(100dvh-5rem)] overflow-y-auto bg-[var(--primary-dark)] border-t border-white/10">
+          <div id="mobile-navigation" style={{ maxHeight: `calc(100dvh - ${headerHeight}px)` }} className="lg:hidden overflow-y-auto bg-[var(--primary-dark)] border-t border-white/10">
             <nav aria-label="Mobile navigation" className="px-4 py-4 space-y-3">
-              {navigationItems.map((item) => (
+              {directItems.map((item) => (
                 <Link
                   key={item.id}
                   to={item.url}
@@ -292,9 +395,15 @@ export default function Layout({ children }) {
                   }`}
                 >
                   <item.icon size={20} className="shrink-0" aria-hidden="true" />
-                  <span className="font-medium break-words min-w-0">{item.title}</span>
+                  <span className="font-medium break-words [overflow-wrap:anywhere] min-w-0">{item.title}</span>
                 </Link>
               ))}
+              {dropdownItems.length > 0 && <details className="rounded-lg border border-white/15" onKeyDown={closeDropdownOnEscape}>
+                <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 font-medium text-white hover:bg-white/5 focus-visible:outline focus-visible:outline-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 break-words [overflow-wrap:anywhere]">{navigationSettings.dropdown_label}</span><ChevronDown size={20} className="shrink-0" aria-hidden="true" /></summary>
+                <div className="space-y-1 px-2 pb-2">
+                  {dropdownItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={() => setMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-4 py-3 ${isActive(item.url) ? 'bg-white/10 text-white font-semibold' : 'text-gray-200 hover:bg-white/5'}`}><item.icon size={20} className="shrink-0" aria-hidden="true" /><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.title}</span></Link>)}
+                </div>
+              </details>}
               {isAdmin && (
                 <Link
                   to={adminLanding(user, IS_DEMO)}
@@ -336,9 +445,10 @@ export default function Layout({ children }) {
       </header>
 
       {/* Main Content */}
-      <main className="pt-20">
+      <main style={{ paddingTop: headerHeight }}>
         {children}
       </main>
+      <FloatingSocialLinks contact={contact} />
 
       {/* Footer */}
       <footer className="bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] text-white mt-20">
@@ -370,7 +480,7 @@ export default function Layout({ children }) {
               </div>
               <div className="mt-6 flex flex-wrap gap-4 text-sm">
                 {Object.entries(socialLinks).map(([name, url]) => url && (
-                  <a key={name} href={url} target="_blank" rel="noreferrer" className="text-[var(--accent-light)] hover:text-white transition-colors">
+                  <a key={name} href={url} target="_blank" rel="noopener noreferrer" className="text-[var(--accent-light)] hover:text-white transition-colors">
                     {name[0].toUpperCase() + name.slice(1)}
                   </a>
                 ))}

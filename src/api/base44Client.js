@@ -2,8 +2,9 @@ import { IS_DEMO, createApiEntity, requestJson } from './transport.js';
 import { LIVE_SERVICES, LIVE_CONCEPTS } from '../data/liveContent.js';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../data/siteAppearance.js';
-import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, isCustomPageDestination, validateNavigationItems } from '../data/navigation.js';
+import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, isCustomPageDestination, validateNavigationItems, validateNavigationSettings } from '../data/navigation.js';
 import { validateCustomPage, isPublishedCustomPage } from '../../server/src/customPageSchema.js';
+import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from '../../server/src/socialMediaSchema.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
@@ -199,6 +200,33 @@ const contactInfoStore = createStore([
   },
 ], 'd16_contact_info')
 
+const contactVersion = (record) => Number.isSafeInteger(record.version) && record.version > 0 ? record.version : 1;
+const normalizedContact = (record) => ({ ...record, ...normalizeSocialMedia(record), version: contactVersion(record) });
+const contactInfoDemo = {
+  async list(ordering) { return (await contactInfoStore.list(ordering)).map(normalizedContact); },
+  async create(payload) {
+    const social_links = validateSocialLinks(payload.social_links);
+    const floating_social = validateFloatingSocial(payload.floating_social, social_links);
+    return normalizedContact(await contactInfoStore.create({ ...payload, social_links, floating_social, version: 1 }));
+  },
+  async update(id, payload) {
+    const saved = (await contactInfoStore.list()).find((record) => String(record.id) === String(id));
+    if (!saved) throw Object.assign(new Error('Contact profile not found.'), { status: 404 });
+    const socialWrite = Object.hasOwn(payload, 'social_links') || Object.hasOwn(payload, 'floating_social');
+    const version = contactVersion(saved);
+    if (socialWrite && (!Number.isSafeInteger(payload.version) || payload.version < 1)) throw Object.assign(new Error('Reload the saved social media settings before saving.'), { status: 400 });
+    if (payload.version != null && Number(payload.version) !== version) throw Object.assign(new Error('Contact info changed in another preview tab. Reload before saving.'), { status: 409 });
+    const updates = { ...payload, version: version + 1 };
+    if (socialWrite) {
+      const merged = { ...normalizedContact(saved), ...payload };
+      updates.social_links = validateSocialLinks(merged.social_links);
+      updates.floating_social = validateFloatingSocial(merged.floating_social, updates.social_links);
+    }
+    return normalizedContact(await contactInfoStore.update(id, updates));
+  },
+  async delete() { throw Object.assign(new Error('Contact profile deletion is not supported.'), { status: 405 }); },
+};
+
 const accessControlStore = createStore([
   {
     id: 1,
@@ -330,21 +358,22 @@ const validatedMenuItems = async (items) => {
 };
 const navigationMenuClient = {
   async list() {
-    return (await navigationMenuStore.list()).map((record) => ({ ...record, version: Number.isSafeInteger(record.version) && record.version > 0 ? record.version : 1 }));
+    return (await navigationMenuStore.list()).map((record) => ({ ...record, ...validateNavigationSettings(record), items: validateNavigationItems(record.items), version: Number.isSafeInteger(record.version) && record.version > 0 ? record.version : 1 }));
   },
   async create(payload) {
     // Seeded demo configuration is always a singleton, including after all links
     // have intentionally been removed. Never create a second menu record.
     const [saved] = await navigationMenuStore.list();
     if (saved) throw new Error('Website tabs already exist. Reload the saved version before editing.');
-    return navigationMenuStore.create({ title: DEFAULT_NAVIGATION_MENU.title, items: await validatedMenuItems(payload.items), version: 1 });
+    return navigationMenuStore.create({ title: DEFAULT_NAVIGATION_MENU.title, ...validateNavigationSettings(payload), items: await validatedMenuItems(payload.items), version: 1 });
   },
   async update(id, payload) {
     const saved = (await navigationMenuClient.list()).find((record) => record.id === id);
     if (!saved) throw new Error('Website tabs were not found. Reload the saved version.');
     if (!Number.isSafeInteger(payload.version) || payload.version < 1) throw Object.assign(new Error('Reload the saved website tabs before saving.'), { status: 400 });
     if (payload.version !== saved.version) throw Object.assign(new Error('Website tabs changed in another preview tab. Reload before saving.'), { status: 409 });
-    return navigationMenuStore.update(id, { title: DEFAULT_NAVIGATION_MENU.title, items: await validatedMenuItems(payload.items), version: saved.version + 1 });
+    const merged = { ...saved, ...payload };
+    return navigationMenuStore.update(id, { title: DEFAULT_NAVIGATION_MENU.title, ...validateNavigationSettings(merged), items: await validatedMenuItems(merged.items), version: saved.version + 1 });
   },
   async delete() { throw new Error('Remove individual tabs or reset the menu instead.'); },
 };
@@ -400,7 +429,7 @@ const demoClient = {
     Project: projectsStore,
     BlogPost: blogPostsStore,
     Consultation: consultationsStore,
-    ContactInfo: contactInfoStore,
+    ContactInfo: contactInfoDemo,
     AccessControl: accessControlStore,
     User: usersStore,
     GalleryVideo: galleryVideosStore,

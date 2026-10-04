@@ -117,11 +117,11 @@ test('navigation can reference saved draft pages but rejects missing or duplicat
   const created = await content.createContent('CustomPage', page(), actor);
   const item = { id: 'custom-link', page: `custom:${created.id}`, label: 'Our story', visible: true };
   const navigation = await content.createContent('NavigationMenu', { title: 'Navigation', items: [item] }, actor);
-  assert.equal(navigation.id, NAVIGATION_MENU_ID); assert.deepEqual(navigation.items, [item]);
+  assert.equal(navigation.id, NAVIGATION_MENU_ID); assert.deepEqual(navigation.items, [{ ...item, in_dropdown: false }]);
   await assert.rejects(content.updateContent('NavigationMenu', navigation.id, { version: 1, items: [{ ...item, page: `custom:${exampleId}` }] }, actor), (error) => error.status === 400);
   assert.throws(() => cleanPublicPayload('NavigationMenu', { title: 'Navigation', items: [item, { ...item, id: 'different', page: item.page.toUpperCase().replace('CUSTOM:', 'custom:') }] }), /supported pages/);
   assert.throws(() => cleanPublicPayload('NavigationMenu', { title: 'Navigation', items: [{ ...item, page: 'custom:../../Admin' }] }), /supported pages/);
-  assert.deepEqual((await content.listContent('NavigationMenu'))[0].items, [item]);
+  assert.deepEqual((await content.listContent('NavigationMenu'))[0].items, [{ ...item, in_dropdown: false }]);
 });
 
 test('custom-page API exposes only published records and requires admin plus branding permission', async (t) => {

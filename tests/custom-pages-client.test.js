@@ -20,7 +20,7 @@ test('custom-page types cover the current site layouts plus FAQ and Team', () =>
 test('custom pages become real basename-safe destinations without replacing existing pages', () => {
   const menu = [...DEFAULT_NAVIGATION_MENU.items, tab];
   assert.equal(validateNavigationItems(menu).length, 9);
-  assert.equal(MAX_NAVIGATION_ITEMS, 40);
+  assert.equal(MAX_NAVIGATION_ITEMS, 250);
   assert.equal(visibleNavigationItems(menu, [page]).at(-1).path, getCustomPagePath(page));
   assert.match(getCustomPagePath(page), new RegExp(`^/Pages/${id}/`));
   assert.equal(visibleNavigationItems(menu, [page]).at(-1).label, 'Questions');

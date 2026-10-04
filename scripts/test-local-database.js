@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import mysql from 'mysql2/promise';
 import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../src/data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../src/data/siteAppearance.js';
-import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU } from '../src/data/navigation.js';
+import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, validateNavigationItems, validateNavigationSettings } from '../src/data/navigation.js';
 import { createCustomPage } from '../server/src/customPageSchema.js';
 
 const container = `d16-sync-test-${randomUUID().slice(0, 8)}`;
@@ -46,7 +46,11 @@ try {
   ];
   for (const [entity, id, defaults, editedPayload] of appearanceFixtures) {
     const [[seededConfig]] = await database.query('SELECT payload FROM app_content WHERE entity_type=? AND id=?', [entity, id]);
-    assert.deepEqual(typeof seededConfig.payload === 'string' ? JSON.parse(seededConfig.payload) : seededConfig.payload, defaults);
+    const seededValue = typeof seededConfig.payload === 'string' ? JSON.parse(seededConfig.payload) : seededConfig.payload;
+    // Migration 005 is intentionally unchanged: older saved menus gain defaults
+    // in validation without overwriting any existing menu on migration reruns.
+    const normalizedSeed = entity === 'NavigationMenu' ? { ...seededValue, ...validateNavigationSettings(seededValue), items: validateNavigationItems(seededValue.items) } : seededValue;
+    assert.deepEqual(normalizedSeed, defaults);
     await database.query('UPDATE app_content SET payload=? WHERE entity_type=? AND id=?', [JSON.stringify(editedPayload), entity, id]);
   }
   await database.query("UPDATE app_content SET payload=JSON_SET(payload,'$.mission_text','Retain edited QA mission') WHERE entity_type='AboutPage' AND id=?", [ABOUT_PAGE_ID]);
@@ -147,9 +151,27 @@ try {
       assert.deepEqual((await request(endpoint, 'GET', undefined, '')).body[0].items, []);
       await database.query(readFileSync('database/migrations/005_navigation.sql', 'utf8'));
       assert.deepEqual((await request(endpoint, 'GET', undefined, '')).body[0].items, []);
+      const grouped = await request(`${endpoint}/${id}`, 'PUT', { version: emptied.body.version, items: DEFAULT_NAVIGATION_MENU.items.map((item, index) => ({ ...item, in_dropdown: index % 2 === 0 })), dropdown_enabled: true, dropdown_label: 'Explore' });
+      assert.equal(grouped.status, 200, JSON.stringify(grouped.body));
+      assert.equal(grouped.body.items.filter((item) => item.in_dropdown).length, 4);
+      assert.equal(grouped.body.dropdown_label, 'Explore');
+      const renamed = await request(`${endpoint}/${id}`, 'PUT', { version: grouped.body.version, dropdown_label: 'Discover' });
+      assert.equal(renamed.status, 200);
+      assert.equal(renamed.body.dropdown_enabled, true);
+      assert.deepEqual(renamed.body.items, grouped.body.items);
+      assert.equal((await request(`${endpoint}/${id}`, 'PUT', { version: grouped.body.version, dropdown_label: 'Stale' })).status, 409);
+      assert.equal((await request(`${endpoint}/${id}`, 'PUT', { version: renamed.body.version, dropdown_enabled: 'false' })).status, 400);
+      const disabled = await request(`${endpoint}/${id}`, 'PUT', { version: renamed.body.version, dropdown_enabled: false });
+      assert.equal(disabled.status, 200);
+      assert.deepEqual(disabled.body.items, grouped.body.items);
+      assert.deepEqual((await request(endpoint, 'GET', undefined, '')).body[0], disabled.body);
+      const settingsAudits = (await request('/audit-logs')).body.filter((row) => row.entity_name === entity && row.new_data.changed_fields.includes('dropdown_label'));
+      assert(settingsAudits.some((row) => row.actor_user_id === admin.id && row.created_at && row.new_data.changed_fields.length === 1));
+      await assert.rejects(failingAppearance.updateContent(entity, id, { version: disabled.body.version, dropdown_label: 'Must roll back' }, { userId: admin.id }), /audit failure/);
+      assert.deepEqual((await request(endpoint)).body[0], disabled.body);
     }
   }
-  console.log('PASS: shared dashboard/icon/navigation persistence, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
+  console.log('PASS: shared dashboard/icon/navigation persistence, client-selected dropdown/title, admin/private boundaries, mandatory versions, concurrent edits, validation and atomic audit history');
 
   assert.equal((await request('/custom-pages?admin=1', 'GET', undefined, '')).status, 401);
   assert.equal((await request('/custom-pages', 'POST', { ...createCustomPage(), title: 'Anonymous draft' }, '')).status, 401);
@@ -178,7 +200,7 @@ try {
   assert(customAudit.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['published'])));
   assert(!JSON.stringify(customAudit).includes('Synthetic FAQ'));
   const currentMenu = (await request('/navigation-menu')).body[0];
-  const customLink = { id: 'nav-custom-faq', page: `custom:${customDraft.body.id}`, label: 'FAQ', visible: true };
+  const customLink = { id: 'nav-custom-faq', page: `custom:${customDraft.body.id}`, label: 'FAQ', visible: true, in_dropdown: false };
   const linkedCustom = await request(`/navigation-menu/${NAVIGATION_MENU_ID}`, 'PUT', { ...currentMenu, items: [customLink] });
   assert.equal(linkedCustom.status, 200, JSON.stringify(linkedCustom.body));
   assert.equal((await request(`/navigation-menu/${NAVIGATION_MENU_ID}`, 'PUT', { ...linkedCustom.body, items: [{ ...customLink, page: `custom:${randomUUID()}` }] })).status, 400);
@@ -242,13 +264,90 @@ try {
   const concept = await request('/pic-your-concept', 'POST', LIVE_CONCEPTS[0]);
   assert.equal(concept.status, 201, JSON.stringify(concept.body));
   assert.deepEqual(concept.body.sub_services, LIVE_CONCEPTS[0].sub_services);
-  const contact = await request('/contact-info', 'POST', { organization_name: 'D16 Local QA', email: 'studio@example.test', phone: '+8801000000000', theme_color: '#112037', locations: ['Test studio'], social_links: { instagram: 'https://instagram.com/example' } });
+  const socialLinks = { instagram: 'https://instagram.com/example', whatsapp: 'https://wa.me/8801000000000' };
+  const initialFloating = { enabled: true, side: 'left', platforms: ['instagram'] };
+  const contact = await request('/contact-info', 'POST', { organization_name: 'D16 Local QA', email: 'studio@example.test', phone: '+8801000000000', theme_color: '#112037', locations: ['Test studio'], social_links: socialLinks, floating_social: initialFloating, actor_user_id: 'forged' });
   assert.equal(contact.status, 201, JSON.stringify(contact.body));
+  assert.equal(contact.body.version, 1);
+  assert.deepEqual(contact.body.floating_social, initialFloating);
   assert.equal((await request('/contact-info')).body.find((row) => row.id === contact.body.id).email, 'studio@example.test');
   const [profiles] = await database.query('SELECT * FROM organization_profile WHERE id=?', [contact.body.id]);
   assert(!profiles[0].contact_email_ciphertext.toString().includes('studio@example.test'));
-  assert.deepEqual((await request('/contact-info')).body.find((row) => row.id === contact.body.id).social_links, { instagram: 'https://instagram.com/example' });
+  const readContact = async () => (await request('/contact-info', 'GET', undefined, '')).body.find((row) => row.id === contact.body.id);
+  assert.deepEqual((await readContact()).social_links, socialLinks);
+  assert.deepEqual((await readContact()).floating_social, initialFloating);
   console.log('PASS: richer services/concepts, edit conflict detection, encrypted contact/social round trips');
+
+  const contactEndpoint = `/contact-info/${contact.body.id}`;
+  assert.equal((await request(contactEndpoint, 'PUT', { version: contact.body.version, floating_social: initialFloating }, '')).status, 401);
+  const viewerPassword = randomBytes(24).toString('base64url');
+  const mediaViewer = await request('/users', 'POST', { email: 'media-viewer@example.test', name: 'Synthetic media viewer', password: viewerPassword, role: 'viewer', verified: true });
+  assert.equal(mediaViewer.status, 201, JSON.stringify(mediaViewer.body));
+  const viewerLogin = await request('/auth/login', 'POST', { email: 'media-viewer@example.test', password: viewerPassword }, '');
+  assert.equal(viewerLogin.status, 200);
+  const viewerCookie = viewerLogin.response.headers.get('set-cookie').split(';')[0];
+  assert.equal((await request(contactEndpoint, 'PUT', { version: contact.body.version, floating_social: initialFloating }, viewerCookie)).status, 403);
+  for (const payload of [{ floating_social: initialFloating }, { social_links: socialLinks }, { version: '1', floating_social: initialFloating }, { version: 0, social_links: socialLinks }]) {
+    assert.equal((await request(contactEndpoint, 'PUT', payload)).status, 400);
+  }
+  const multipleFloating = { enabled: true, side: 'right', platforms: ['whatsapp', 'instagram'] };
+  const floatingUpdate = await request(contactEndpoint, 'PUT', { version: contact.body.version, floating_social: multipleFloating });
+  assert.equal(floatingUpdate.status, 200, JSON.stringify(floatingUpdate.body));
+  assert.equal(floatingUpdate.body.version, contact.body.version + 1);
+  assert.deepEqual((await readContact()).floating_social, multipleFloating);
+  assert.deepEqual(floatingUpdate.body.social_links, socialLinks);
+  assert.equal((await request(contactEndpoint, 'PUT', { version: contact.body.version, floating_social: initialFloating })).status, 409);
+  const invalidSocialPayloads = [
+    { floating_social: { ...multipleFloating, platforms: ['facebook'] } },
+    { floating_social: { ...multipleFloating, platforms: ['instagram', 'instagram'] } },
+    { floating_social: { ...multipleFloating, enabled: 'true' } },
+    { floating_social: { ...multipleFloating, side: 'center' } },
+    { floating_social: { ...multipleFloating, unexpected: true } },
+    { floating_social: null },
+    { social_links: { ...socialLinks, instagram: 'javascript:alert(1)' } },
+    { social_links: { ...socialLinks, instagram: 'https://user:password@example.test/' } },
+    { social_links: { ...socialLinks, instagram: '' } },
+    { social_links: { instagram: socialLinks.instagram } },
+  ];
+  const contactAuditsBeforeInvalid = (await request('/audit-logs')).body.filter((row) => row.entity_id === contact.body.id);
+  for (const invalid of invalidSocialPayloads) {
+    assert.equal((await request(contactEndpoint, 'PUT', { version: floatingUpdate.body.version, ...invalid })).status, 400, JSON.stringify(invalid));
+  }
+  assert.deepEqual(await readContact(), floatingUpdate.body);
+  assert.deepEqual((await request('/audit-logs')).body.filter((row) => row.entity_id === contact.body.id), contactAuditsBeforeInvalid);
+  const unrelatedContactUpdate = await request(contactEndpoint, 'PUT', { version: floatingUpdate.body.version, address: 'Synthetic updated studio' });
+  assert.equal(unrelatedContactUpdate.status, 200, JSON.stringify(unrelatedContactUpdate.body));
+  assert.deepEqual(unrelatedContactUpdate.body.social_links, socialLinks);
+  assert.deepEqual(unrelatedContactUpdate.body.floating_social, multipleFloating);
+  const concurrentSocial = await Promise.all([
+    request(contactEndpoint, 'PUT', { version: unrelatedContactUpdate.body.version, floating_social: { ...multipleFloating, side: 'left' } }),
+    request(contactEndpoint, 'PUT', { version: unrelatedContactUpdate.body.version, floating_social: { ...multipleFloating, enabled: false } }),
+  ]);
+  assert.deepEqual(concurrentSocial.map((entry) => entry.status).sort(), [200, 409]);
+  const beforeSocialAuditFailure = await readContact();
+  const failingSocialAudit = content.createContentRepository({ database: pool, audit: async () => { throw new Error('synthetic social audit failure'); } });
+  await assert.rejects(failingSocialAudit.updateContent('ContactInfo', contact.body.id, { version: beforeSocialAuditFailure.version, address: 'Must roll back studio', floating_social: { enabled: false, side: 'right', platforms: [] } }, { userId: admin.id }), /social audit failure/);
+  assert.deepEqual(await readContact(), beforeSocialAuditFailure);
+  const disabledFloating = { enabled: false, side: 'right', platforms: [] };
+  const removedSocial = await request(contactEndpoint, 'PUT', { version: beforeSocialAuditFailure.version, social_links: {}, floating_social: disabledFloating });
+  assert.equal(removedSocial.status, 200, JSON.stringify(removedSocial.body));
+  assert.deepEqual((await readContact()).social_links, {});
+  assert.deepEqual((await readContact()).floating_social, disabledFloating);
+  const [[savedSocialMetadata]] = await database.query("SELECT payload, version FROM app_content WHERE entity_type='ContactInfo' AND id=?", [contact.body.id]);
+  const savedSocial = typeof savedSocialMetadata.payload === 'string' ? JSON.parse(savedSocialMetadata.payload) : savedSocialMetadata.payload;
+  assert.deepEqual(savedSocial.social_links, {});
+  assert.deepEqual(savedSocial.floating_social, disabledFloating);
+  assert.equal(savedSocialMetadata.version, removedSocial.body.version);
+  const contactAudits = (await request('/audit-logs')).body.filter((row) => row.entity_name === 'ContactInfo' && row.entity_id === contact.body.id);
+  assert.equal(contactAudits.length, 5);
+  assert(contactAudits.every((row) => row.actor_user_id === admin.id && row.created_at));
+  assert(contactAudits.some((row) => row.action === 'create'));
+  assert(contactAudits.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['floating_social'])));
+  assert(contactAudits.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['address'])));
+  assert(contactAudits.some((row) => JSON.stringify(row.new_data.changed_fields) === JSON.stringify(['floating_social', 'social_links'])));
+  assert(!JSON.stringify(contactAudits).includes(socialLinks.whatsapp));
+  assert(!JSON.stringify(contactAudits).includes('studio@example.test'));
+  console.log('PASS: floating media create/read/update/removal, chosen order/side, saved-version and concurrent conflicts, safe links/references, partial-update preservation, permissions and attributed atomic audit history');
 
   const visitor = { full_name: 'Synthetic Test Visitor', email: 'visitor@example.test', phone: '+8801999999999', project_type: 'residential', location: 'Private testing address', budget: 'Synthetic budget', message: 'Confidential QA message', preferred_date: '2026-12-01', status: 'completed', actor_user_id: admin.id };
   const submitted = await request('/consultations', 'POST', visitor, '');

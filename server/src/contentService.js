@@ -4,6 +4,7 @@ import { pool } from "./db.js";
 import { encryptText, decryptText, lookupHash } from "./security.js";
 import { writeAudit } from "./auditService.js";
 import { validateCustomPage } from "./customPageSchema.js";
+import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from "./socialMediaSchema.js";
 
 const publicFields = {
   HeroSlide: ["title", "subtitle", "image", "order", "active"],
@@ -14,11 +15,11 @@ const publicFields = {
   GalleryVideo: ["title", "thumbnail", "video_url", "external_video_url", "duration", "category", "order"],
   GalleryConcept: ["title", "slug", "description", "image", "features", "order", "sub_services"],
   PicYourConcept: ["title", "slug", "description", "image", "features", "order", "sub_services"],
-  ContactInfo: ["organization_name", "address", "working_hours", "locations", "theme_color", "logo_url", "social_links"],
+  ContactInfo: ["organization_name", "address", "working_hours", "locations", "theme_color", "logo_url", "social_links", "floating_social"],
   AboutPage: ["title", "subtitle", "hero_image", "philosophy_title", "philosophy_text", "philosophy_detail", "mission_summary", "philosophy_image", "approach_title", "approach_subtitle", "approach_steps", "principles_title", "principles_subtitle", "vision_title", "vision_text", "mission_title", "mission_text", "team_title", "team_subtitle", "team_members"],
   DashboardLayout: ["title", "card_order"],
   WebsiteIcons: ["title", "icons"],
-  NavigationMenu: ["title", "items"],
+  NavigationMenu: ["title", "items", "dropdown_enabled", "dropdown_label"],
   CustomPage: ["title", "page_type", "intro", "body", "hero_image", "items", "published"],
 };
 export const ABOUT_PAGE_ID = "8c3de170-4be7-4e45-9f3d-618d0b20c613";
@@ -107,17 +108,23 @@ const validateAppearancePayload = (entity, result) => {
 
 const validateNavigationPayload = (result) => {
   if (typeof result.title !== "string" || result.title.length > 300) throw errorWithStatus("Navigation title must be at most 300 characters", 400);
-  if (!Array.isArray(result.items) || result.items.length > 40) throw errorWithStatus("Navigation must contain at most 40 items", 400);
+  if (!Array.isArray(result.items) || result.items.length > 250) throw errorWithStatus("Navigation must contain at most 250 items", 400);
+  if (!Object.hasOwn(result, "dropdown_enabled")) result.dropdown_enabled = false;
+  if (!Object.hasOwn(result, "dropdown_label")) result.dropdown_label = "More";
+  if (typeof result.dropdown_enabled !== "boolean") throw errorWithStatus("Navigation dropdown visibility must be a boolean", 400);
+  if (typeof result.dropdown_label !== "string" || !result.dropdown_label.trim() || result.dropdown_label.trim().length > 60 || [...result.dropdown_label].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw errorWithStatus("Navigation dropdown title must contain 1 to 60 characters without control characters", 400);
+  result.dropdown_label = result.dropdown_label.trim();
   const ids = new Set(); const pages = new Set();
   result.items = result.items.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["id", "page", "label", "visible"].includes(key))) throw errorWithStatus("Navigation items accept only id, page, label and visible", 400);
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["id", "page", "label", "visible", "in_dropdown"].includes(key))) throw errorWithStatus("Navigation items accept only id, page, label, visible and in_dropdown", 400);
     if (typeof item.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id)) throw errorWithStatus("Navigation items need unique valid IDs", 400);
     const customPage = typeof item.page === "string" && item.page.startsWith("custom:") && uuidPattern.test(item.page.slice(7));
     if (typeof item.page !== "string" || (!navigationPages.has(item.page) && !customPage) || pages.has(item.page.toLowerCase())) throw errorWithStatus("Navigation items need unique supported pages", 400);
     if (typeof item.label !== "string" || !item.label.trim() || item.label.trim().length > 60 || [...item.label].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw errorWithStatus("Navigation labels must contain 1 to 60 characters without control characters", 400);
     if (typeof item.visible !== "boolean") throw errorWithStatus("Navigation visibility must be a boolean", 400);
+    if (Object.hasOwn(item, "in_dropdown") && typeof item.in_dropdown !== "boolean") throw errorWithStatus("Navigation dropdown placement must be a boolean", 400);
     ids.add(item.id); pages.add(item.page.toLowerCase());
-    return { id: item.id, page: customPage ? item.page.toLowerCase() : item.page, label: item.label.trim(), visible: item.visible };
+    return { id: item.id, page: customPage ? item.page.toLowerCase() : item.page, label: item.label.trim(), visible: item.visible, in_dropdown: item.in_dropdown ?? false };
   });
 };
 
@@ -152,7 +159,7 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   const arrayFields = new Set(["features", "gallery_images", "sub_services", "locations", "approach_steps", "team_members", "card_order", "items"]);
   const booleanFields = new Set(["active", "featured", "published"]);
   for (const [field, value] of Object.entries(result)) {
-    if (arrayFields.has(field) || field === "social_links" || field === "icons" || field === "order") continue;
+    if (arrayFields.has(field) || field === "social_links" || field === "floating_social" || field === "icons" || field === "order" || (canonical === "NavigationMenu" && field === "dropdown_enabled")) continue;
     if (booleanFields.has(field)) {
       if (![true, false, 0, 1].includes(value)) throw errorWithStatus(`${field} must be a boolean`, 400);
       result[field] = Boolean(value);
@@ -187,9 +194,9 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
     }
   }
   if (result.locations) result.locations = [...new Set(result.locations.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))];
-  if (result.social_links) {
-    if (typeof result.social_links !== "object" || Array.isArray(result.social_links) || Object.keys(result.social_links).some((key) => !/^[a-z][a-z0-9_]{0,31}$/.test(key))) throw errorWithStatus("Invalid social link platform name", 400);
-    for (const url of Object.values(result.social_links)) if (url && (typeof url !== "string" || !/^https?:\/\//i.test(url))) throw errorWithStatus("Social links must use http or https", 400);
+  if (canonical === "ContactInfo") {
+    result.social_links = validateSocialLinks(result.social_links);
+    result.floating_social = validateFloatingSocial(result.floating_social, result.social_links);
   }
   if (canonical === "AboutPage") validateAboutPayload(result);
   if (appearanceEntities.has(canonical)) validateAppearancePayload(canonical, result);
@@ -216,17 +223,27 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
     const [rows] = await connection.execute(`SELECT * FROM app_content WHERE entity_type = ? AND id = ?${lock ? " FOR UPDATE" : ""}`, [entity, id]);
     return rows[0];
   };
-  const mapPublic = (row) => ({ ...jsonObject(row.payload), id: row.id, created_date: isoDate(row.created_at), updated_date: isoDate(row.updated_at), version: row.version });
+  const mapPublic = (row) => {
+    const payload = jsonObject(row.payload);
+    // Older saved menus have no placement/settings fields. Add harmless read
+    // defaults without rewriting their saved content or increasing its version.
+    const normalized = row.entity_type === "NavigationMenu" ? {
+      dropdown_enabled: false, dropdown_label: "More", ...payload,
+      items: Array.isArray(payload.items) ? payload.items.map((item) => ({ in_dropdown: false, ...item })) : payload.items,
+    } : payload;
+    return { ...normalized, id: row.id, created_date: isoDate(row.created_at), updated_date: isoDate(row.updated_at), version: row.version };
+  };
   const savePublic = async (connection, entity, id, payload, isNew) => {
     if (isNew) await connection.execute("INSERT INTO app_content (entity_type, id, payload, version, created_at, updated_at) VALUES (?, ?, ?, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())", [entity, id, JSON.stringify(payload)]);
     else await connection.execute("UPDATE app_content SET payload = ?, version = version + 1, updated_at = UTC_TIMESTAMP() WHERE entity_type = ? AND id = ?", [JSON.stringify(payload), entity, id]);
   };
   const mapContact = async (connection, row) => {
     const metadata = await readPublic(connection, "ContactInfo", row.id);
+    const publicMetadata = jsonObject(metadata?.payload);
     const [locations] = await connection.execute("SELECT location_name FROM organization_locations WHERE organization_profile_id = ? ORDER BY sort_order, created_at", [row.id]);
     return {
       organization_name: row.organization_name, address: row.address || "", working_hours: row.working_hours || "", theme_color: row.theme_color || "",
-      locations: locations.map((item) => item.location_name), logo_url: row.logo_url || "", ...jsonObject(metadata?.payload),
+      locations: locations.map((item) => item.location_name), logo_url: row.logo_url || "", ...publicMetadata, ...normalizeSocialMedia(publicMetadata),
       id: row.id, email: decrypt(row.contact_email_ciphertext, context("ContactInfo", row.id, "email")) || "",
       phone: decrypt(row.contact_phone_ciphertext, context("ContactInfo", row.id, "phone")) || "",
       created_date: isoDate(row.created_at), updated_date: isoDate(row.updated_at), version: metadata?.version || 1,
@@ -264,6 +281,7 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
       const [rows] = await connection.execute("SELECT * FROM organization_profile WHERE id = ? FOR UPDATE", [id]);
       if (!rows[0]) throw errorWithStatus("Contact profile not found", 404);
       existing = await mapContact(connection, rows[0]);
+      if ((Object.hasOwn(payload, "social_links") || Object.hasOwn(payload, "floating_social")) && (!Number.isSafeInteger(payload.version) || payload.version < 1)) throw errorWithStatus("A valid saved version is required; refresh social media before saving", 400);
       if (payload.version != null && Number(payload.version) !== existing.version) throw errorWithStatus("Contact info was changed by another editor; refresh before saving", 409);
     }
     const publicData = cleanPublicPayload("ContactInfo", payload, existing);
@@ -276,6 +294,9 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
     else await connection.execute("UPDATE organization_profile SET organization_name = ?, contact_email_ciphertext = ?, contact_phone_ciphertext = ?, contact_email_hash = ?, contact_phone_hash = ?, address = ?, working_hours = ?, theme_color = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?", [...values, id]);
     const metadata = await readPublic(connection, "ContactInfo", id);
     await savePublic(connection, "ContactInfo", id, publicData, !metadata);
+    // Legacy profiles without app_content report version 1 on read. Their first
+    // edit must advance to version 2 as well, so another editor cannot reuse 1.
+    if (!metadata && !isNew) await savePublic(connection, "ContactInfo", id, publicData, false);
     await connection.execute("DELETE FROM organization_locations WHERE organization_profile_id = ?", [id]);
     for (const [order, location] of (publicData.locations || []).entries()) await connection.execute("INSERT INTO organization_locations (id, organization_profile_id, location_name, sort_order) VALUES (?, ?, ?, ?)", [randomUUID(), id, location, order]);
     await audit(connection, { actor, action: isNew ? "create" : "update", entityName: "ContactInfo", entityId: id, changedFields: Object.keys(payload).filter((field) => [...publicFields.ContactInfo, "email", "phone"].includes(field)) });

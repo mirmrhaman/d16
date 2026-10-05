@@ -5,6 +5,7 @@ import { encryptText, decryptText, lookupHash } from "./security.js";
 import { writeAudit } from "./auditService.js";
 import { validateCustomPage } from "./customPageSchema.js";
 import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from "./socialMediaSchema.js";
+import { validateConceptGallery } from "./conceptGallerySchema.js";
 
 const publicFields = {
   HeroSlide: ["title", "subtitle", "image", "order", "active"],
@@ -180,9 +181,11 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   if (result.sub_services) {
     const childFields = new Set(["id", "title", "slug", "description", "image", "features", "order"]);
-    for (const child of result.sub_services) {
+    if (canonical === "PicYourConcept") { childFields.add("gallery_images"); childFields.add("gallery_button_label"); }
+    result.sub_services = result.sub_services.map((child) => {
       if (!child || typeof child !== "object" || Array.isArray(child) || Object.keys(child).some((key) => !childFields.has(key))) throw errorWithStatus("Sub-services accept public presentation fields only", 400);
       for (const [key, value] of Object.entries(child)) {
+        if (canonical === "PicYourConcept" && ["gallery_images", "gallery_button_label"].includes(key)) continue;
         if (key === "features") {
           if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) throw errorWithStatus("Sub-service features must contain strings", 400);
         } else if (key === "order") {
@@ -191,7 +194,8 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
           if (!["string", "number"].includes(typeof value)) throw errorWithStatus("Invalid sub-service id", 400);
         } else if (typeof value !== "string") throw errorWithStatus("Invalid sub-service value", 400);
       }
-    }
+      return canonical === "PicYourConcept" ? { ...child, ...validateConceptGallery(child) } : child;
+    });
   }
   if (result.locations) result.locations = [...new Set(result.locations.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))];
   if (canonical === "ContactInfo") {

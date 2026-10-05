@@ -5,6 +5,7 @@ import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAUL
 import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, isCustomPageDestination, validateNavigationItems, validateNavigationSettings } from '../data/navigation.js';
 import { validateCustomPage, isPublishedCustomPage } from '../../server/src/customPageSchema.js';
 import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from '../../server/src/socialMediaSchema.js';
+import { validateConceptGallery } from '../../server/src/conceptGallerySchema.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
@@ -378,6 +379,19 @@ const navigationMenuClient = {
   async delete() { throw new Error('Remove individual tabs or reset the menu instead.'); },
 };
 const picYourConceptStore = createStore(LIVE_CONCEPTS, 'd16_pic_your_concept');
+const validateConceptSections = (payload) => {
+  if (!Object.hasOwn(payload, 'sub_services')) return payload;
+  if (!Array.isArray(payload.sub_services)) throw new Error('Detail sections must be an array.');
+  return { ...payload, sub_services: payload.sub_services.map((section) => {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) throw new Error('Invalid detail section.');
+    return { ...section, ...validateConceptGallery(section, { allowDataImages: true }) };
+  }) };
+};
+const picYourConceptClient = {
+  ...picYourConceptStore,
+  async create(payload) { return picYourConceptStore.create(validateConceptSections(payload)); },
+  async update(id, payload) { return picYourConceptStore.update(id, validateConceptSections(payload)); },
+};
 const usersStore = createStore([], 'd16_demo_users');
 const demoUser = { id: 'demo-preview', name: 'Local preview', role: 'admin', permissions: [] };
 
@@ -434,7 +448,7 @@ const demoClient = {
     User: usersStore,
     GalleryVideo: galleryVideosStore,
     GalleryConcept: galleryConceptsStore,
-    PicYourConcept: picYourConceptStore,
+    PicYourConcept: picYourConceptClient,
   },
 }
 

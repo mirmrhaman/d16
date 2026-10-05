@@ -9,6 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { IS_DEMO } from "@/api/transport";
+import ConceptGalleryEditor from "./ConceptGalleryEditor";
+import { validateConceptGallery } from "../../../server/src/conceptGallerySchema.js";
 
 const slugify = (value = "") => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const blankItem = () => ({ title: "", slug: "", description: "", image: "", order: 0, features: [], sub_services: [] });
@@ -42,6 +45,7 @@ function ImageField({ label, value, onChange, onBusy, onError }) {
 }
 
 export default function CatalogueEditor({ client, queryKey, title, singular, route }) {
+  const supportsGalleries = route === "PicYourConcept";
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(null);
   const [slugEdited, setSlugEdited] = useState(false);
@@ -53,7 +57,7 @@ export default function CatalogueEditor({ client, queryKey, title, singular, rou
   const save = useMutation({
     mutationFn: (item) => item.id ? client.update(item.id, item) : client.create(item),
     onSuccess: async () => { await refresh(); setEditing(null); setMessage(singular + " saved successfully."); setFormError(""); },
-    onError: () => setFormError("Saving failed. Your changes are still here. Please check your connection and try again."),
+    onError: (error) => setFormError(error?.name === "QuotaExceededError" ? "This browser is out of storage. Your draft is still here. Remove some uploaded photos or use image URLs, then save again." : error?.status === 409 ? "This concept changed in another session. Your draft is still here. Copy your changes before reloading the saved version." : "Saving failed. Your changes are still here. Please check your connection and try again."),
   });
   const remove = useMutation({
     mutationFn: (id) => client.delete(id),
@@ -62,7 +66,7 @@ export default function CatalogueEditor({ client, queryKey, title, singular, rou
   });
   const busy = uploadCount > 0 || save.isPending;
   const change = (key, value) => setEditing((current) => ({ ...current, [key]: value }));
-  const setSection = (index, key, value) => setEditing((current) => ({ ...current, sub_services: current.sub_services.map((section, i) => i === index ? { ...section, [key]: value } : section) }));
+  const setSection = (index, key, value) => setEditing((current) => ({ ...current, sub_services: current.sub_services.map((section, i) => i === index ? { ...section, [key]: typeof value === "function" ? value(section[key]) : value } : section) }));
   const moveSection = (index, direction) => setEditing((current) => {
     const sections = [...current.sub_services];
     const destination = index + direction;
@@ -76,10 +80,13 @@ export default function CatalogueEditor({ client, queryKey, title, singular, rou
   };
   const submit = (event) => {
     event.preventDefault(); setFormError("");
+    if (busy) return;
     const slug = slugify(editing.slug || editing.title);
     if (!slug) return setFormError("Enter a web address name containing letters or numbers.");
     if (items.some((item) => String(item.id) !== String(editing.id) && slugify(item.slug || item.title) === slug)) return setFormError("This web address is already used. Choose a unique name.");
-    save.mutate({ ...editing, slug, title: editing.title.trim(), description: editing.description.trim(), order: Number(editing.order) || 0, features: editing.features.map((feature) => feature.trim()).filter(Boolean), sub_services: editing.sub_services.map((section) => ({ ...section, title: section.title.trim(), description: section.description.trim(), image: (section.image || "").trim() })) });
+    try {
+      save.mutate({ ...editing, slug, title: editing.title.trim(), description: editing.description.trim(), order: Number(editing.order) || 0, features: editing.features.map((feature) => feature.trim()).filter(Boolean), sub_services: editing.sub_services.map((section) => ({ ...section, title: section.title.trim(), description: section.description.trim(), image: (section.image || "").trim(), ...(supportsGalleries ? validateConceptGallery(section, { allowDataImages: IS_DEMO }) : {}) })) });
+    } catch (error) { setFormError(error.message); }
   };
 
   return <div className="min-h-screen bg-gray-50 py-8 sm:py-12"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -88,13 +95,13 @@ export default function CatalogueEditor({ client, queryKey, title, singular, rou
     {formError && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-red-800">{formError}</p>}
     {error && <div role="alert" className="mb-6 rounded-lg bg-red-50 p-4"><p className="mb-3">Could not load {title.toLowerCase()}.</p><Button onClick={() => refetch()}>Try again</Button></div>}
 
-    {editing && <Card className="mb-8"><CardHeader><CardTitle>{editing.id ? "Edit " : "New "}{singular}</CardTitle></CardHeader><CardContent><form onSubmit={submit}><fieldset disabled={save.isPending} className="space-y-6">
+    {editing && <Card className="mb-8"><CardHeader><CardTitle>{editing.id ? "Edit " : "New "}{singular}</CardTitle></CardHeader><CardContent><form onSubmit={submit}><fieldset disabled={busy} className="space-y-6">
       <div className="grid gap-5 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="catalogue-title">{singular} title *</Label><Input id="catalogue-title" required maxLength={180} value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value, slug: slugEdited ? editing.slug : slugify(e.target.value) })} /></div><div className="space-y-2"><Label htmlFor="catalogue-slug">Web address name *</Label><Input id="catalogue-slug" required value={editing.slug} onChange={(e) => { setSlugEdited(true); change("slug", e.target.value); }} /><p className="break-all text-xs text-gray-500">/{route}/{slugify(editing.slug || editing.title)}</p></div></div>
       <div className="space-y-2"><Label htmlFor="catalogue-description">Description *</Label><Textarea id="catalogue-description" required rows={4} value={editing.description} onChange={(e) => change("description", e.target.value)} /></div>
       <div className="grid gap-5 sm:grid-cols-2"><ImageField label="Card image" value={editing.image} onChange={(value) => change("image", value)} onBusy={(delta) => setUploadCount((count) => count + delta)} onError={setFormError} /><div className="space-y-2"><Label htmlFor="catalogue-order">Display order</Label><Input id="catalogue-order" type="number" min={0} step={1} value={editing.order} onChange={(e) => change("order", e.target.value)} /></div></div>
 
       <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold text-[var(--primary)]">Detail sections</h2><p className="text-sm text-gray-600">Alternating image and text sections on the public detail page.</p></div><Button type="button" variant="outline" onClick={() => change("sub_services", [...editing.sub_services, { title: "", image: "", description: "" }])}><Plus size={16} className="mr-2" />Add section</Button></div>
-        {editing.sub_services.map((section, index) => <fieldset key={index} className="space-y-4 rounded-xl border bg-gray-50 p-4 sm:p-6"><legend className="px-2 font-semibold text-[var(--primary)]">Section {index + 1}</legend><div className="flex justify-end gap-2"><Button type="button" size="icon" variant="outline" aria-label={"Move section " + (index + 1) + " up"} disabled={index === 0 || busy} onClick={() => moveSection(index, -1)}><ArrowUp size={16} /></Button><Button type="button" size="icon" variant="outline" aria-label={"Move section " + (index + 1) + " down"} disabled={index === editing.sub_services.length - 1 || busy} onClick={() => moveSection(index, 1)}><ArrowDown size={16} /></Button><Button type="button" variant="outline" disabled={busy} onClick={() => change("sub_services", editing.sub_services.filter((_, i) => i !== index))}><Trash2 size={16} className="mr-2" />Remove</Button></div><div className="space-y-2"><Label htmlFor={"section-title-" + index}>Section title *</Label><Input id={"section-title-" + index} required value={section.title} onChange={(e) => setSection(index, "title", e.target.value)} /></div><div className="space-y-2"><Label htmlFor={"section-description-" + index}>Section description *</Label><Textarea id={"section-description-" + index} required rows={4} value={section.description} onChange={(e) => setSection(index, "description", e.target.value)} /></div><ImageField label={"Section " + (index + 1) + " image"} value={section.image} onChange={(value) => setSection(index, "image", value)} onBusy={(delta) => setUploadCount((count) => count + delta)} onError={setFormError} /></fieldset>)}
+        {editing.sub_services.map((section, index) => <fieldset key={index} className="space-y-4 rounded-xl border bg-gray-50 p-4 sm:p-6"><legend className="px-2 font-semibold text-[var(--primary)]">Section {index + 1}</legend><div className="flex justify-end gap-2"><Button type="button" size="icon" variant="outline" aria-label={"Move section " + (index + 1) + " up"} disabled={index === 0 || busy} onClick={() => moveSection(index, -1)}><ArrowUp size={16} /></Button><Button type="button" size="icon" variant="outline" aria-label={"Move section " + (index + 1) + " down"} disabled={index === editing.sub_services.length - 1 || busy} onClick={() => moveSection(index, 1)}><ArrowDown size={16} /></Button><Button type="button" variant="outline" disabled={busy} onClick={() => change("sub_services", editing.sub_services.filter((_, i) => i !== index))}><Trash2 size={16} className="mr-2" />Remove</Button></div><div className="space-y-2"><Label htmlFor={"section-title-" + index}>Section title *</Label><Input id={"section-title-" + index} required value={section.title} onChange={(e) => setSection(index, "title", e.target.value)} /></div><div className="space-y-2"><Label htmlFor={"section-description-" + index}>Section description *</Label><Textarea id={"section-description-" + index} required rows={4} value={section.description} onChange={(e) => setSection(index, "description", e.target.value)} /></div><ImageField label={"Section " + (index + 1) + " image"} value={section.image} onChange={(value) => setSection(index, "image", value)} onBusy={(delta) => setUploadCount((count) => count + delta)} onError={setFormError} />{supportsGalleries && <ConceptGalleryEditor section={section} onChange={(key, value) => setSection(index, key, value)} onBusy={(delta) => setUploadCount((count) => count + delta)} onError={setFormError} />}</fieldset>)}
       </section>
 
       <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold text-[var(--primary)]">Features (optional)</h2><Button type="button" variant="outline" onClick={() => change("features", [...editing.features, ""])}><Plus size={16} className="mr-2" />Add feature</Button></div>{editing.features.map((feature, index) => <div key={index} className="flex gap-2"><Input aria-label={"Feature " + (index + 1)} value={feature} onChange={(e) => change("features", editing.features.map((value, i) => i === index ? e.target.value : value))} /><Button type="button" size="icon" variant="outline" aria-label={"Remove feature " + (index + 1)} onClick={() => change("features", editing.features.filter((_, i) => i !== index))}><Trash2 size={16} /></Button></div>)}</section>

@@ -45,6 +45,7 @@ import AdminUsers from "./Pages/AdminUsers";
 import AdminGallery from "./Pages/AdminGallery";
 import PicYourConcept from "./Pages/PicYourConcept";
 import PicYourConceptDetail from "./Pages/PicYourConceptDetail";
+import ConceptItemGallery from "./Pages/ConceptItemGallery";
 import ServiceDetail from "./Pages/ServiceDetail";
 import AdminPicYourConcept from "./Pages/AdminPicYourConcept";
 import AdminLocations from "./Pages/AdminLocations";
@@ -63,6 +64,7 @@ export default function App() {
       <Route path="/Portfolio" element={<Layout><Portfolio /></Layout>} />
       <Route path="/PicYourConcept" element={<Layout><PicYourConcept /></Layout>} />
       <Route path="/PicYourConcept/:conceptSlug" element={<Layout><PicYourConceptDetail /></Layout>} />
+      <Route path="/PicYourConcept/:conceptSlug/gallery/:sectionId" element={<Layout><ConceptItemGallery /></Layout>} />
       <Route path="/Gallery" element={<Layout><Gallery /></Layout>} />
       <Route path="/About" element={<Layout><About /></Layout>} />
       <Route path="/AdminAbout" element={<RequireAuth allowedRoles={['admin', 'super']} featureKey="About"><Layout><AdminAbout /></Layout></RequireAuth>} />

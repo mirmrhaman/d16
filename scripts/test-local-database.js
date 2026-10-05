@@ -9,6 +9,7 @@ import { ABOUT_PAGE_ID, DEFAULT_ABOUT } from '../src/data/aboutContent.js';
 import { DASHBOARD_LAYOUT_ID, WEBSITE_ICONS_ID, DEFAULT_DASHBOARD_LAYOUT, DEFAULT_WEBSITE_ICONS } from '../src/data/siteAppearance.js';
 import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, validateNavigationItems, validateNavigationSettings } from '../src/data/navigation.js';
 import { createCustomPage } from '../server/src/customPageSchema.js';
+import { gallerySelectionMessage, selectionParams, resolveGallerySelection } from '../src/data/conceptGallerySelection.js';
 
 const container = `d16-sync-test-${randomUUID().slice(0, 8)}`;
 const password = randomBytes(32).toString('base64url');
@@ -264,17 +265,25 @@ try {
   const concept = await request('/pic-your-concept', 'POST', LIVE_CONCEPTS[0]);
   assert.equal(concept.status, 201, JSON.stringify(concept.body));
   assert.deepEqual(concept.body.sub_services, LIVE_CONCEPTS[0].sub_services);
-  const gallerySections = concept.body.sub_services.map((section, index) => index ? section : { ...section, gallery_button_label: 'Design Ideas', gallery_images: ['https://example.test/master-1.jpg', '/uploads/master-2.webp'] });
+  const gallerySections = concept.body.sub_services.map((section, index) => index ? section : { ...section, id: 'master-bed', gallery_button_label: 'Design Ideas', gallery_title: 'Master bedroom inspiration', gallery_description: 'Choose your favourites', gallery_continue_label: 'Discuss these designs', gallery_images: [{ id: 'warm-wood', url: 'https://example.test/master-1.jpg', title: 'Warm wood', description: 'Natural finish' }, { id: 'soft-light', url: '/uploads/master-2.webp', title: '', description: '' }] });
   const gallerySaved = await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: concept.body.version, sub_services: gallerySections });
   assert.equal(gallerySaved.status, 200, JSON.stringify(gallerySaved.body));
   assert.deepEqual(gallerySaved.body.sub_services, gallerySections);
   assert.equal(gallerySaved.body.description, concept.body.description);
   const galleryRead = (await request('/pic-your-concept', 'GET', undefined, '')).body.find((item) => item.id === concept.body.id);
   assert.deepEqual(galleryRead.sub_services, gallerySections);
+  const selectedGallery = resolveGallerySelection([galleryRead], selectionParams(galleryRead, galleryRead.sub_services[0], ['warm-wood', 'soft-light'])).selection;
+  const selectedGalleryMessage = gallerySelectionMessage(selectedGallery);
+  assert(selectedGalleryMessage.includes('Warm wood')); assert(selectedGalleryMessage.includes('soft-light'));
   assert.equal((await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: concept.body.version, sub_services: [] })).status, 409);
   assert.equal((await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: gallerySaved.body.version, sub_services: [{ ...gallerySections[0], gallery_images: ['javascript:alert(1)'] }] })).status, 400);
   assert.equal((await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: gallerySaved.body.version, sub_services: [] }, '')).status, 401);
-  const galleryRemoved = await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: gallerySaved.body.version, sub_services: gallerySections.map((section, index) => index ? section : { ...section, gallery_images: [], gallery_button_label: 'Images' }) });
+  assert.equal((await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: gallerySaved.body.version, sub_services: [{ ...gallerySections[0], gallery_continue_label: 'x'.repeat(61) }] })).status, 400);
+  const galleryReordered = await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: gallerySaved.body.version, sub_services: gallerySections.map((section, index) => index ? section : { ...section, gallery_images: [...section.gallery_images].reverse() }) });
+  assert.equal(galleryReordered.status, 200, JSON.stringify(galleryReordered.body));
+  assert.equal(galleryReordered.body.sub_services[0].gallery_images[1].id, 'warm-wood');
+  assert.equal(galleryReordered.body.sub_services[0].gallery_images[1].title, 'Warm wood');
+  const galleryRemoved = await request(`/pic-your-concept/${concept.body.id}`, 'PUT', { version: galleryReordered.body.version, sub_services: gallerySections.map((section, index) => index ? section : { ...section, gallery_images: [], gallery_button_label: 'Images' }) });
   assert.equal(galleryRemoved.status, 200, JSON.stringify(galleryRemoved.body));
   assert.deepEqual(galleryRemoved.body.sub_services[0].gallery_images, []);
   assert.deepEqual(galleryRemoved.body.sub_services.slice(1), concept.body.sub_services.slice(1));
@@ -367,7 +376,7 @@ try {
   assert(!JSON.stringify(contactAudits).includes('studio@example.test'));
   console.log('PASS: floating media create/read/update/removal, chosen order/side, saved-version and concurrent conflicts, safe links/references, partial-update preservation, permissions and attributed atomic audit history');
 
-  const visitor = { full_name: 'Synthetic Test Visitor', email: 'visitor@example.test', phone: '+8801999999999', project_type: 'residential', location: 'Private testing address', budget: 'Synthetic budget', message: 'Confidential QA message', preferred_date: '2026-12-01', status: 'completed', actor_user_id: admin.id };
+  const visitor = { full_name: 'Synthetic Test Visitor', email: 'visitor@example.test', phone: '+8801999999999', project_type: 'residential', location: 'Private testing address', budget: 'Synthetic budget', message: 'Confidential QA message\n\n' + selectedGalleryMessage, preferred_date: '2026-12-01', status: 'completed', actor_user_id: admin.id };
   const submitted = await request('/consultations', 'POST', visitor, '');
   assert.equal(submitted.status, 201, JSON.stringify(submitted.body));
   assert.equal(submitted.body.status, 'pending');

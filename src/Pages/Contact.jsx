@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { IS_DEMO } from '@/api/transport';
 import { base44 } from "@/api/base44Client";
 import { contactInfoClient } from "@/api/contactInfoClient";
@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Phone, Mail, MapPin, Clock } from "lucide-react";
+import { conceptGalleryPath, resolveGallerySelection, gallerySelectionMessage } from '@/data/conceptGallerySelection';
+import { createPageUrl } from '@/utils';
 
 const countryCodes = [
   { code: "+880", country: "Bangladesh" },
@@ -27,8 +29,21 @@ const countryCodes = [
 ];
 
 export default function Contact() {
+  const [params] = useSearchParams();
+  const galleryRequested = params.get('conceptGallery') === '1';
+  const { data: concepts = [], isLoading, error, refetch } = useQuery({ queryKey: ['picYourConcept'], queryFn: () => base44.entities.PicYourConcept.list('order'), enabled: galleryRequested });
+  if (galleryRequested && isLoading) return <div role="status" className="px-4 py-24 text-center">Loading your selected designs…</div>;
+  if (galleryRequested && error) return <div role="alert" className="space-y-5 px-4 py-24 text-center"><p>We couldn’t load your selected designs. Please retry before continuing.</p><Button onClick={() => refetch()}>Try again</Button><p><Link to={createPageUrl('PicYourConcept')} className="underline">Back to concepts</Link></p></div>;
+  const resolved = galleryRequested ? resolveGallerySelection(concepts, params, { allowDataImages: IS_DEMO }) : { selection: null, warning: '' };
+  return <ContactForm key={params.toString()} galleryRequested={galleryRequested} gallerySelection={resolved.selection} selectionWarning={resolved.warning} />;
+}
+
+function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
   const [searchParams] = useSearchParams();
-  const conceptTitle = searchParams.get('conceptTitle') || searchParams.get('serviceTitle') || '';
+  const conceptTitle = gallerySelection ? `${gallerySelection.concept.title} — ${gallerySelection.section.title}` : galleryRequested ? '' : searchParams.get('conceptTitle') || searchParams.get('serviceTitle') || '';
+  const selectionMessage = gallerySelection ? gallerySelectionMessage(gallerySelection) : '';
+  const selectionSearch = new URLSearchParams();
+  gallerySelection?.photos.forEach((photo) => selectionSearch.append('photo', photo.id));
   const [countryCode, setCountryCode] = useState("+880");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [formData, setFormData] = useState({
@@ -78,7 +93,7 @@ export default function Contact() {
   const handleSubmit = (e) => {
     e.preventDefault();
     const fullPhone = `${countryCode} ${phoneNumber}`;
-    createMutation.mutate({ ...formData, phone: fullPhone });
+    createMutation.mutate({ ...formData, phone: fullPhone, message: selectionMessage ? `${formData.message}\n\n${selectionMessage}` : formData.message });
   };
 
   const contactInfoItems = [
@@ -153,6 +168,8 @@ export default function Contact() {
                     {IS_DEMO && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Preview only: this form cannot send requests yet. Please do not enter confidential information.</p>}
                     {createMutation.error && <p role="alert" className="text-red-700">{createMutation.error.message}</p>}
                     {conceptTitle && <p className="rounded-lg bg-slate-50 p-3 text-sm">Selected inspiration: <strong>{conceptTitle}</strong></p>}
+                    {selectionWarning && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{selectionWarning} <Link to={createPageUrl('PicYourConcept')} className="underline">Choose concepts</Link></p>}
+                    {gallerySelection && <section aria-label="Selected designs" className="space-y-3 rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-[var(--primary)]">Selected designs ({gallerySelection.photos.length})</h3><Link className="text-sm underline" to={`${conceptGalleryPath(gallerySelection.concept, gallerySelection.section)}?${selectionSearch}`}>Change selection</Link></div><ul className="grid max-h-72 gap-3 overflow-y-auto sm:grid-cols-2">{gallerySelection.photos.map((photo, index) => <li key={photo.id} className="min-w-0"><img src={photo.url} alt={photo.title || `Selected design ${index + 1}`} className="h-28 w-full rounded-lg object-cover" /><p className="mt-1 break-words text-sm">{photo.title || `Selected design ${index + 1}`}</p></li>)}</ul><p className="text-xs text-gray-500">These design references are included automatically when you submit your consultation request.</p></section>}
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <Label htmlFor="full_name">Name *</Label>
@@ -248,6 +265,7 @@ export default function Contact() {
                       <Label htmlFor="message">Message</Label>
                       <Textarea
                         id="message"
+                        maxLength={Math.max(0, 20000 - selectionMessage.length - 2)}
                         value={formData.message}
                         onChange={(e) => setFormData({...formData, message: e.target.value})}
                         placeholder="Tell us about your project..."

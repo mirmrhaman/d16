@@ -5,7 +5,7 @@ import { encryptText, decryptText, lookupHash } from "./security.js";
 import { writeAudit } from "./auditService.js";
 import { validateCustomPage } from "./customPageSchema.js";
 import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from "./socialMediaSchema.js";
-import { validateConceptGallery } from "./conceptGallerySchema.js";
+import { validateConceptGallery, CONCEPT_GALLERY_FIELDS } from "./conceptGallerySchema.js";
 
 const publicFields = {
   HeroSlide: ["title", "subtitle", "image", "order", "active"],
@@ -181,11 +181,11 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   if (result.sub_services) {
     const childFields = new Set(["id", "title", "slug", "description", "image", "features", "order"]);
-    if (canonical === "PicYourConcept") { childFields.add("gallery_images"); childFields.add("gallery_button_label"); }
+    if (canonical === "PicYourConcept") CONCEPT_GALLERY_FIELDS.forEach((field) => childFields.add(field));
     result.sub_services = result.sub_services.map((child) => {
       if (!child || typeof child !== "object" || Array.isArray(child) || Object.keys(child).some((key) => !childFields.has(key))) throw errorWithStatus("Sub-services accept public presentation fields only", 400);
       for (const [key, value] of Object.entries(child)) {
-        if (canonical === "PicYourConcept" && ["gallery_images", "gallery_button_label"].includes(key)) continue;
+        if (canonical === "PicYourConcept" && CONCEPT_GALLERY_FIELDS.includes(key)) continue;
         if (key === "features") {
           if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) throw errorWithStatus("Sub-service features must contain strings", 400);
         } else if (key === "order") {
@@ -196,6 +196,10 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
       }
       return canonical === "PicYourConcept" ? { ...child, ...validateConceptGallery(child) } : child;
     });
+    if (canonical === "PicYourConcept") {
+      const ids = result.sub_services.filter((child) => child.id != null).map((child) => String(child.id));
+      if (ids.some((id) => !/^[a-zA-Z0-9_-]{1,80}$/.test(id)) || new Set(ids).size !== ids.length) throw errorWithStatus("Concept detail sections need unique valid IDs", 400);
+    }
   }
   if (result.locations) result.locations = [...new Set(result.locations.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))];
   if (canonical === "ContactInfo") {

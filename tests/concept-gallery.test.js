@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DEFAULT_GALLERY_LABEL, MAX_CONCEPT_GALLERY_IMAGES, DEMO_GALLERY_FILE_BYTES, validateConceptGallery, readConceptGallery, isSafeGalleryImage } from '../server/src/conceptGallerySchema.js';
+import { DEFAULT_GALLERY_LABEL, DEFAULT_GALLERY_CONTINUE_LABEL, MAX_CONCEPT_GALLERY_IMAGES, DEMO_GALLERY_FILE_BYTES, validateConceptGallery, readConceptGallery, isSafeGalleryImage, getGalleryImageId, getConceptSectionId } from '../server/src/conceptGallerySchema.js';
 
 Object.assign(process.env, {
   API_ENV_FILE: '/dev/null', NODE_ENV: 'qa', DB_HOST: '127.0.0.1', DB_PORT: '65531', DB_NAME: 'dinterio_d16_qa', DB_USER: 'offline_test', DB_PASSWORD: 'synthetic-test-only',
@@ -12,10 +12,11 @@ const { pool } = await import('../server/src/db.js');
 test.after(() => pool.end());
 const images = ['https://example.test/master-1.jpg', '/uploads/master-2.webp'];
 const section = { title: 'Master Bed', description: 'Public example', image: images[0], gallery_images: images, gallery_button_label: 'Design Ideas' };
+const emptyGallery = { label: DEFAULT_GALLERY_LABEL, images: [], items: [], title: '', description: '', continueLabel: DEFAULT_GALLERY_CONTINUE_LABEL };
 
 test('optional galleries preserve legacy records and default empty labels', () => {
   assert.deepEqual(validateConceptGallery({ title: 'Child Bed' }), {});
-  assert.deepEqual(readConceptGallery({}), { label: DEFAULT_GALLERY_LABEL, images: [] });
+  assert.deepEqual(readConceptGallery({}), emptyGallery);
   assert.deepEqual(validateConceptGallery({ gallery_images: [], gallery_button_label: '  ' }), { gallery_images: [], gallery_button_label: DEFAULT_GALLERY_LABEL });
   assert.deepEqual(validateConceptGallery({ ...section, gallery_button_label: '  Images  ' }), { gallery_images: images, gallery_button_label: 'Images' });
   assert.notEqual(validateConceptGallery(section).gallery_images, images);
@@ -44,8 +45,8 @@ test('unsafe URLs, credentials, non-image data and server data URLs are rejected
 });
 
 test('public gallery reads filter malformed legacy values without exposing unsafe images', () => {
-  assert.deepEqual(readConceptGallery({ gallery_button_label: {}, gallery_images: [images[0], images[0], 'javascript:bad', null, images[1]] }), { label: DEFAULT_GALLERY_LABEL, images });
-  assert.deepEqual(readConceptGallery(null), { label: DEFAULT_GALLERY_LABEL, images: [] });
+  assert.deepEqual(readConceptGallery({ gallery_button_label: {}, gallery_images: [images[0], images[0], 'javascript:bad', null, images[1]] }), { ...emptyGallery, images, items: images.map((url) => ({ id: getGalleryImageId(url), url, title: '', description: '' })) });
+  assert.deepEqual(readConceptGallery(null), emptyGallery);
 });
 
 test('server accepts concept galleries only, preserves siblings/metadata and partial updates', () => {
@@ -85,16 +86,39 @@ test('demo gallery create/edit/reload/removal survives persistence and quota fai
   } finally { if (original === undefined) delete globalThis.localStorage; else globalThis.localStorage = original; }
 });
 
-test('UI wiring retains quote links, optional gallery scope, multiple upload and keyboard dialog controls', () => {
+test('UI wiring replaces the dialog with a selectable page and retains quote links', () => {
   const detail = readFileSync('src/Pages/catalogue/CatalogueDetail.jsx', 'utf8');
   const editor = readFileSync('src/Pages/catalogue/ConceptGalleryEditor.jsx', 'utf8');
-  const gallery = readFileSync('src/Pages/catalogue/ConceptGallery.jsx', 'utf8');
+  const link = readFileSync('src/Pages/catalogue/ConceptGalleryLink.jsx', 'utf8');
+  const gallery = readFileSync('src/Pages/ConceptItemGallery.jsx', 'utf8');
   assert.match(detail, /catalogue === "PicYourConcept" && <ConceptGallery/);
   assert.match(detail, /<Link to=\{contactUrl\} className=\{linkClass\}>Get a Quote/);
   assert.match(editor, /type="file" multiple/);
   assert.match(editor, /gallery_button_label/);
   assert.match(editor, /Move gallery photo/); assert.match(editor, /Remove gallery photo/);
-  assert.match(gallery, /if \(!images.length\) return null/);
-  assert.match(gallery, /dialog.showModal\(\)/); assert.match(gallery, /onCancel=/);
-  assert.match(gallery, /ArrowLeft.*ArrowRight/); assert.match(gallery, /previousFocus.focus\(\)/);
+  assert.match(link, /if \(!images.length\) return null/);
+  assert.match(link, /<Link to=\{conceptGalleryPath/);
+  assert.doesNotMatch(gallery, /<dialog|<video|<iframe|GalleryVideo|showModal/);
+  assert.match(gallery, /aria-pressed=\{selected\}/); assert.match(gallery, /togglePhotoSelection/);
+  assert.match(gallery, /disabled=\{!selected.length\}/);
+  assert.match(editor, /gallery_continue_label/); assert.match(editor, /gallery_title/); assert.match(editor, /gallery_description/);
+});
+
+test('photo captions and page copy are optional, bounded and preserve stable identities', () => {
+  const photo = { id: 'photo-1', url: images[0], title: 'Warm wood', description: 'Natural finishes\nSoft light' };
+  const config = { gallery_images: [photo, images[1]], gallery_title: '  Master bedroom ideas  ', gallery_description: 'Choose your favourite\nOne or more designs.', gallery_continue_label: '  Enquire about these designs  ' };
+  const saved = validateConceptGallery(config);
+  assert.equal(saved.gallery_title, 'Master bedroom ideas'); assert.equal(saved.gallery_continue_label, 'Enquire about these designs');
+  assert.deepEqual(saved.gallery_images, config.gallery_images);
+  const items = readConceptGallery(saved).items;
+  assert.equal(items[0].id, 'photo-1'); assert.equal(items[1].id, getGalleryImageId(images[1]));
+  assert.equal(readConceptGallery({ gallery_images: [...config.gallery_images].reverse() }).items[1].id, 'photo-1');
+  const legacyId = getConceptSectionId(section);
+  assert.equal(getConceptSectionId({ ...section, id: legacyId, title: 'Renamed', image: images[1] }), legacyId);
+  assert.equal(getGalleryImageId({ ...photo, title: 'Renamed photo' }), photo.id);
+  for (const patch of [{ gallery_title: 'x'.repeat(181) }, { gallery_description: 'x'.repeat(3001) }, { gallery_continue_label: 'x'.repeat(61) }]) assert.throws(() => validateConceptGallery({ ...config, ...patch }));
+  for (const bad of [{ ...photo, id: '../bad' }, { ...photo, secret: 'bad' }, { ...photo, title: 'x'.repeat(181) }, { ...photo, description: 'x'.repeat(2001) }, { ...photo, url: 'javascript:bad' }]) assert.throws(() => validateConceptGallery({ gallery_images: [bad] }));
+  assert.throws(() => validateConceptGallery({ gallery_images: [photo, { ...photo, url: images[1] }] }), /unique id/);
+  assert.deepEqual(readConceptGallery({ gallery_images: [photo, { ...photo, id: 'other', url: 'javascript:bad' }] }).items, [photo]);
+  assert.throws(() => cleanPublicPayload('PicYourConcept', { title: 'Bed Room', sub_services: [{ ...section, id: 'same' }, { ...section, id: 'same' }] }), /unique valid IDs/);
 });

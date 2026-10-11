@@ -6,7 +6,9 @@ const tagged = (role) => `[data-d16-text="${role}"]`;
 // new content without applying CTA styling to selectable gallery-photo cards.
 export const TEXT_SELECTORS = {
   all: '*:not(svg):not(svg *)',
-  navigation: 'header nav a, header nav summary',
+  // Only the client-managed page tabs/dropdowns opt in. Header account actions
+  // (login/logout/admin/consultation) can have their own contrasting buttons.
+  navigation: tagged('navigation'),
   button: `${natural('button')}, ${tagged('button')}`,
   title: `${natural('h1')}, ${tagged('title')}`,
   heading: `${natural('h2')}, ${tagged('heading')}`,

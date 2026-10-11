@@ -67,3 +67,12 @@ test('public typography controls are wired to permissions, text roles and protec
   assert.match(gallery, /data-d16-text="card-title"/);
   assert.match(readFileSync('src/Pages/catalogue/ConceptGalleryLink.jsx', 'utf8'), /data-d16-text="button"/);
 });
+
+test('navigation typography only targets marked page tabs, not account/action buttons', () => {
+  assert.equal(TEXT_SELECTORS.navigation, '[data-d16-text="navigation"]');
+  const layout = readFileSync('src/Layout.jsx', 'utf8');
+  assert.equal((layout.match(/data-d16-text="navigation"/g) || []).length, 6);
+  const accountActions = layout.slice(layout.indexOf('aria-label="Account actions"'), layout.indexOf('{/* Mobile Menu Button */}'));
+  assert.doesNotMatch(accountActions, /data-d16-text="navigation"/);
+  assert.match(layout, /<Button className="w-full bg-\[var\(--accent\)\] hover:bg-\[var\(--primary\)\] text-white">\s*Book Consultation/);
+});

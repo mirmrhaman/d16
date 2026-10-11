@@ -318,6 +318,7 @@ export default function Layout({ children }) {
                   <div ref={navigationTrackRef} className="flex w-max min-w-full flex-nowrap items-center justify-center gap-1 xl:gap-2">
                     {directItems.map((item) => <Link
                       key={item.id}
+                      data-d16-text="navigation"
                       to={item.url}
                       aria-current={isActive(item.url) ? 'page' : undefined}
                       className={`shrink-0 whitespace-nowrap rounded px-1.5 py-3 text-sm font-medium transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] ${isActive(item.url) ? 'text-white underline underline-offset-4' : 'text-gray-200 hover:text-white'}`}
@@ -328,9 +329,9 @@ export default function Layout({ children }) {
               </div>}
               {/* Keep the dropdown outside the clipped horizontal scroller. */}
               {dropdownItems.length > 0 && <details className="relative ml-auto max-w-[10rem] shrink-0" onKeyDown={closeDropdownOnEscape}>
-                <summary title={navigationSettings.dropdown_label} className={`flex cursor-pointer list-none items-center gap-1 rounded px-2 py-3 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 truncate">{navigationSettings.dropdown_label}</span><ChevronDown size={16} className="shrink-0" aria-hidden="true" /></summary>
+                <summary data-d16-text="navigation" title={navigationSettings.dropdown_label} className={`flex cursor-pointer list-none items-center gap-1 rounded px-2 py-3 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 truncate">{navigationSettings.dropdown_label}</span><ChevronDown size={16} className="shrink-0" aria-hidden="true" /></summary>
                 <div style={{ maxHeight: `max(6rem, calc(100dvh - ${headerHeight}px - 1rem))` }} className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-white/20 bg-[var(--primary-dark)] p-2 shadow-xl">
-                  {dropdownItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={(event) => { event.currentTarget.closest('details').open = false; }} className={`block break-words [overflow-wrap:anywhere] rounded-lg px-4 py-3 text-sm text-white hover:bg-white/10 ${isActive(item.url) ? 'bg-white/10 font-semibold' : ''}`}>{item.title}</Link>)}
+                  {dropdownItems.map((item) => <Link key={item.id} data-d16-text="navigation" to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={(event) => { event.currentTarget.closest('details').open = false; }} className={`block break-words [overflow-wrap:anywhere] rounded-lg px-4 py-3 text-sm text-white hover:bg-white/10 ${isActive(item.url) ? 'bg-white/10 font-semibold' : ''}`}>{item.title}</Link>)}
                 </div>
               </details>}
             </nav>}
@@ -389,6 +390,7 @@ export default function Layout({ children }) {
               {directItems.map((item) => (
                 <Link
                   key={item.id}
+                  data-d16-text="navigation"
                   to={item.url}
                   aria-current={isActive(item.url) ? 'page' : undefined}
                   onClick={() => setMobileMenuOpen(false)}
@@ -403,9 +405,9 @@ export default function Layout({ children }) {
                 </Link>
               ))}
               {dropdownItems.length > 0 && <details className="rounded-lg border border-white/15" onKeyDown={closeDropdownOnEscape}>
-                <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 font-medium text-white hover:bg-white/5 focus-visible:outline focus-visible:outline-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 break-words [overflow-wrap:anywhere]">{navigationSettings.dropdown_label}</span><ChevronDown size={20} className="shrink-0" aria-hidden="true" /></summary>
+                <summary data-d16-text="navigation" className={`flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 font-medium text-white hover:bg-white/5 focus-visible:outline focus-visible:outline-2 [&::-webkit-details-marker]:hidden ${dropdownItems.some((item) => isActive(item.url)) ? 'bg-white/10' : ''}`}><span className="min-w-0 break-words [overflow-wrap:anywhere]">{navigationSettings.dropdown_label}</span><ChevronDown size={20} className="shrink-0" aria-hidden="true" /></summary>
                 <div className="space-y-1 px-2 pb-2">
-                  {dropdownItems.map((item) => <Link key={item.id} to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={() => setMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-4 py-3 ${isActive(item.url) ? 'bg-white/10 text-white font-semibold' : 'text-gray-200 hover:bg-white/5'}`}><item.icon size={20} className="shrink-0" aria-hidden="true" /><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.title}</span></Link>)}
+                  {dropdownItems.map((item) => <Link key={item.id} data-d16-text="navigation" to={item.url} aria-current={isActive(item.url) ? 'page' : undefined} onClick={() => setMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-4 py-3 ${isActive(item.url) ? 'bg-white/10 text-white font-semibold' : 'text-gray-200 hover:bg-white/5'}`}><item.icon size={20} className="shrink-0" aria-hidden="true" /><span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.title}</span></Link>)}
                 </div>
               </details>}
               {isAdmin && (

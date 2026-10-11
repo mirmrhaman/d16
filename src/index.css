@@ -9,3 +9,67 @@
 	--accent-dark: #3a7bc8;
 	--accent-light: #e8f1fb;
 }
+
+/* Typography overrides never affect the editing/recovery screens. Keep the
+   original responsive layout until an administrator actually saves a rule. */
+[data-d16-public][data-d16-typography-active] :where(h1, h2, h3, h4, h5, h6, p, [data-d16-text]) {
+  overflow-wrap: anywhere;
+}
+[data-d16-public][data-d16-typography-metrics] .d16-header-row {
+  height: auto;
+  min-height: 5rem;
+}
+[data-d16-public][data-d16-typography-metrics] main {
+  overflow-x: clip;
+}
+[data-d16-public][data-d16-typography-metrics] :where(button:not([data-d16-text]):not(:empty):not([aria-label]), [data-d16-text="button"]):not(:has(img)) {
+  height: auto;
+  min-height: 2.5rem;
+}
+[data-d16-public][data-d16-typography-metrics] main :where(button:not([data-d16-text]):not(:empty):not([aria-label]), [data-d16-text="button"]):not(:has(img)) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero] {
+  height: auto;
+  min-height: 50vh;
+}
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero] > img {
+  position: absolute;
+  inset: 0;
+}
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero-slide] {
+  position: relative;
+}
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero-content] {
+  position: relative;
+  min-height: inherit;
+  padding-block: 5rem;
+}
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero="carousel"],
+[data-d16-public][data-d16-typography-metrics] [data-d16-hero-slide] {
+  min-height: max(38rem, calc(100svh - 5rem));
+}
+[data-d16-public][data-d16-typography-metrics] :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="hidden"]), textarea, select, [role="combobox"]) {
+  height: auto;
+  min-height: 2.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+[data-d16-public][data-d16-typography-metrics] .d16-phone-fields {
+  flex-wrap: wrap;
+}
+[data-d16-public][data-d16-typography-metrics] .d16-phone-fields > * {
+  min-width: min(100%, 9rem);
+  flex: 1 1 9rem;
+}
+[data-d16-public][data-d16-typography-metrics] .d16-phone-fields select {
+  width: 100%;
+}
+[data-d16-public][data-d16-typography-metrics] main :where(.grid > *, .flex > *) {
+  min-width: 0;
+}
+[data-d16-public][data-d16-typography-metrics] :where(label, legend, a, li) {
+  overflow-wrap: anywhere;
+}

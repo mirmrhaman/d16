@@ -27,14 +27,14 @@ export default function About() {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="relative h-[50vh] md:h-[60vh] overflow-hidden bg-[var(--primary)]">
+      <div data-d16-hero="page" className="relative h-[50vh] md:h-[60vh] overflow-hidden bg-[var(--primary)]">
         {heroImage && <img
           src={heroImage}
           alt={about.title}
           className="w-full h-full object-cover"
         />}
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--primary)]/80 to-[var(--primary)]/50" />
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div data-d16-hero-content className="absolute inset-0 flex items-center justify-center">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}

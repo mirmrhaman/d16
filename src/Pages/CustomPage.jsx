@@ -26,10 +26,10 @@ function PageImage({ src, alt, className = '', portrait = false, eager = false }
   </div>;
 }
 
-function ItemText({ item, centered = false }) {
+function ItemText({ item, centered = false, titleRole = 'card-title' }) {
   return <div className={`min-w-0 ${centered ? 'text-center' : ''}`}>
-    {item.meta && <p className={`mb-3 text-sm font-semibold text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
-    <h2 className={`mb-4 text-2xl font-bold text-[var(--primary)] ${prose}`}>{item.title}</h2>
+    {item.meta && <p data-d16-text="small" className={`mb-3 text-sm font-semibold text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
+    <h2 data-d16-text={titleRole} className={`mb-4 text-2xl font-bold text-[var(--primary)] ${prose}`}>{item.title}</h2>
     {item.text && <p className={`text-base text-gray-600 ${prose}`}>{item.text}</p>}
   </div>;
 }
@@ -40,7 +40,7 @@ function StorySections({ items, landing = false }) {
       {item.image && <PageImage src={item.image} alt={item.title} className={`aspect-[4/3] rounded-2xl shadow-lg ${index % 2 ? 'md:order-2' : ''}`} />}
       <div className="min-w-0">
         {landing && <div className="mb-5 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--accent-light)] font-bold text-[var(--primary)]" aria-hidden="true">{String(index + 1).padStart(2, '0')}</div>}
-        <ItemText item={item} />
+        <ItemText item={item} titleRole="heading" />
       </div>
     </article>)}
   </div>;
@@ -87,13 +87,13 @@ function Articles({ items }) {
     {items.map((item) => <article key={item.id} className="min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       {item.image && <PageImage src={item.image} alt={item.title} className="aspect-[16/9]" />}
       <div className="p-6 md:p-8">
-        {item.meta && <p className={`mb-3 text-sm text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
-        <h2 className={`text-2xl font-bold text-[var(--primary)] md:text-3xl ${prose}`}>{item.title}</h2>
+        {item.meta && <p data-d16-text="small" className={`mb-3 text-sm text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
+        <h2 data-d16-text="card-title" className={`text-2xl font-bold text-[var(--primary)] md:text-3xl ${prose}`}>{item.title}</h2>
         {item.text && <details className="group mt-5">
-          <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 rounded text-sm font-semibold text-[var(--accent-dark)] [&::-webkit-details-marker]:hidden ${focusRing}`}>
+          <summary data-d16-text="link" className={`flex cursor-pointer list-none items-center justify-between gap-4 rounded text-sm font-semibold text-[var(--accent-dark)] [&::-webkit-details-marker]:hidden ${focusRing}`}>
             <span>Read article<span className="sr-only">: {item.title}</span></span><ChevronDown aria-hidden="true" size={20} className="shrink-0 transition-transform group-open:rotate-180" />
           </summary>
-          <div className={`mt-5 border-t border-gray-100 pt-5 text-gray-600 ${prose}`}>{item.text}</div>
+          <div data-d16-text="body" className={`mt-5 border-t border-gray-100 pt-5 text-gray-600 ${prose}`}>{item.text}</div>
         </details>}
       </div>
     </article>)}
@@ -113,11 +113,11 @@ function Questions({ items }) {
   return <div className="mx-auto max-w-4xl space-y-4">
     {items.map((item) => <details key={item.id} className="group min-w-0 rounded-2xl border border-gray-200 bg-white p-6 open:border-[var(--accent)]">
       <summary className={`flex cursor-pointer list-none items-center justify-between gap-5 rounded [&::-webkit-details-marker]:hidden ${focusRing}`}>
-        <h2 className={`min-w-0 text-xl font-semibold text-[var(--primary)] ${prose}`}>{item.title}</h2>
+        <h2 data-d16-text="card-title" className={`min-w-0 text-xl font-semibold text-[var(--primary)] ${prose}`}>{item.title}</h2>
         <ChevronDown aria-hidden="true" className="shrink-0 text-[var(--accent-dark)] transition-transform group-open:rotate-180" size={22} />
       </summary>
       <div className="mt-5 border-t border-gray-100 pt-5">
-        {item.meta && <p className={`mb-3 text-sm font-medium text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
+        {item.meta && <p data-d16-text="small" className={`mb-3 text-sm font-medium text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
         {item.text && <p className={`text-gray-600 ${prose}`}>{item.text}</p>}
         {item.image && <PageImage src={item.image} alt={item.title} className="mt-5 aspect-[16/9] rounded-xl" />}
       </div>
@@ -130,8 +130,8 @@ function TeamCards({ items }) {
     {items.map((item) => <article key={item.id} className="min-w-0 overflow-hidden rounded-2xl bg-white shadow-lg">
       <PageImage src={item.image} alt={item.title} portrait className="aspect-[4/5]" />
       <div className="p-6 text-center">
-        <h2 className={`mb-2 text-2xl font-bold text-[var(--primary)] ${prose}`}>{item.title}</h2>
-        {item.meta && <p className={`mb-4 font-semibold text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
+        <h2 data-d16-text="card-title" className={`mb-2 text-2xl font-bold text-[var(--primary)] ${prose}`}>{item.title}</h2>
+        {item.meta && <p data-d16-text="small" className={`mb-4 font-semibold text-[var(--accent-dark)] ${prose}`}>{item.meta}</p>}
         {item.text && <p className={`text-gray-600 ${prose}`}>{item.text}</p>}
       </div>
     </article>)}
@@ -153,7 +153,7 @@ const templates = {
 
 function ConsultationLink() {
   return <div className="bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] px-4 py-12 text-center text-white sm:px-6">
-    <Link to={createPageUrl('Contact')} className={`inline-flex items-center gap-3 rounded-lg bg-[var(--accent)] px-7 py-4 font-semibold text-white hover:bg-[var(--accent-dark)] ${focusRing}`}>Book Consultation<ArrowRight size={20} aria-hidden="true" /></Link>
+    <Link data-d16-text="button" to={createPageUrl('Contact')} className={`inline-flex items-center gap-3 rounded-lg bg-[var(--accent)] px-7 py-4 font-semibold text-white hover:bg-[var(--accent-dark)] ${focusRing}`}>Book Consultation<ArrowRight size={20} aria-hidden="true" /></Link>
   </div>;
 }
 
@@ -163,7 +163,7 @@ function UnavailablePage({ missing, refetch, isFetching }) {
     <p className="mx-auto mb-6 max-w-xl text-gray-600">{missing ? 'This page is not currently published or is no longer available.' : 'We couldn’t load this page. Please try again.'}</p>
     <div className="flex flex-wrap justify-center gap-4">
       {!missing && <button type="button" disabled={isFetching} onClick={() => refetch()} className={`rounded-md bg-[var(--primary)] px-6 py-3 font-semibold text-white disabled:opacity-60 ${focusRing}`}>{isFetching ? 'Trying again…' : 'Try again'}</button>}
-      <Link to={createPageUrl('Home')} className={`rounded-md border border-gray-300 px-6 py-3 font-semibold text-[var(--primary)] ${focusRing}`}>Back to Home</Link>
+      <Link data-d16-text="button" to={createPageUrl('Home')} className={`rounded-md border border-gray-300 px-6 py-3 font-semibold text-[var(--primary)] ${focusRing}`}>Back to Home</Link>
     </div>
   </div>;
 }
@@ -192,7 +192,7 @@ export default function CustomPage() {
         {page.intro && <p className={`mx-auto mt-6 max-w-4xl text-lg text-gray-100 md:text-xl ${prose}`}>{page.intro}</p>}
       </div>
     </header>
-    {page.body && <section className="border-b border-gray-100 bg-white py-12 md:py-16"><div className={`${container} ${prose} max-w-5xl text-lg text-gray-600`}>{page.body}</div></section>}
+    {page.body && <section className="border-b border-gray-100 bg-white py-12 md:py-16"><div data-d16-text="body" className={`${container} ${prose} max-w-5xl text-lg text-gray-600`}>{page.body}</div></section>}
     {page.items.length > 0 && <section className={`py-12 md:py-20 ${['team', 'faq', 'contact'].includes(page.page_type) ? 'bg-gray-50' : ''}`} aria-label={`${page.title} content`}><div className={container}>{templates[page.page_type](page.items)}</div></section>}
     {['landing', 'services', 'concepts', 'contact'].includes(page.page_type) && <ConsultationLink />}
   </div>;

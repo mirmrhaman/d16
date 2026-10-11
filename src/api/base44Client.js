@@ -6,6 +6,7 @@ import { NAVIGATION_MENU_ID, DEFAULT_NAVIGATION_MENU, isCustomPageDestination, v
 import { validateCustomPage, isPublishedCustomPage } from '../../server/src/customPageSchema.js';
 import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from '../../server/src/socialMediaSchema.js';
 import { validateConceptGallery } from '../../server/src/conceptGallerySchema.js';
+import { TYPOGRAPHY_ID, validateTypography } from '../../server/src/typographySchema.js';
 
 const hasLocalStorage = typeof localStorage !== 'undefined';
 
@@ -330,6 +331,44 @@ const servicesStore = createStore(LIVE_SERVICES, 'd16_services');
 const aboutPageStore = createStore([{ ...DEFAULT_ABOUT, id: ABOUT_PAGE_ID }], 'd16_about_page');
 const dashboardLayoutStore = createStore([{ ...DEFAULT_DASHBOARD_LAYOUT, id: DASHBOARD_LAYOUT_ID }], 'd16_dashboard_layout');
 const websiteIconsStore = createStore([{ ...DEFAULT_WEBSITE_ICONS, id: WEBSITE_ICONS_ID }], 'd16_website_icons');
+const typographyStorageKey = 'd16_website_typography_demo_v2';
+let typographyMemory = [];
+const typographyError = (message, status) => Object.assign(new Error(message), { status });
+const readTypography = () => {
+  const stored = hasLocalStorage ? localStorage.getItem(typographyStorageKey) : null;
+  let rows;
+  try { rows = stored === null ? typographyMemory : JSON.parse(stored); }
+  catch { throw typographyError('Saved typography could not be read. Restore the preview backup before editing.', 400); }
+  if (!Array.isArray(rows) || rows.length > 1) throw typographyError('Saved typography must contain a single settings record.', 400);
+  return rows.map((record) => {
+    if (!record || record.id !== TYPOGRAPHY_ID || !Number.isSafeInteger(record.version) || record.version < 1) throw typographyError('Saved typography has an invalid identity or version.', 400);
+    return { ...validateTypography(record), id: TYPOGRAPHY_ID, version: record.version, created_date: record.created_date, updated_date: record.updated_date };
+  });
+};
+const writeTypography = (record) => {
+  // Complete validation and persistence before resolving. A failed storage write
+  // must not replace the saved in-memory version or silently lose old settings.
+  const serialized = JSON.stringify([record]);
+  if (hasLocalStorage) localStorage.setItem(typographyStorageKey, serialized);
+  else typographyMemory = JSON.parse(serialized);
+  return record;
+};
+const typographyClient = {
+  async list() { return readTypography(); },
+  async create(payload) {
+    if (readTypography().length) throw typographyError('Typography settings already exist. Reload before saving.', 409);
+    const timestamp = new Date().toISOString();
+    return writeTypography({ ...validateTypography(payload), id: TYPOGRAPHY_ID, version: 1, created_date: timestamp, updated_date: timestamp });
+  },
+  async update(id, payload) {
+    const [saved] = readTypography();
+    if (!saved || saved.id !== id) throw typographyError('Typography settings were not found. Reload before saving.', 404);
+    if (!payload || !Number.isSafeInteger(payload.version) || payload.version < 1) throw typographyError('Reload the saved typography version before saving.', 400);
+    if (payload.version !== saved.version) throw typographyError('Typography changed in another preview tab. Reload before saving.', 409);
+    return writeTypography({ ...validateTypography({ ...saved, ...payload }), id: TYPOGRAPHY_ID, version: saved.version + 1, created_date: saved.created_date, updated_date: new Date().toISOString() });
+  },
+  async delete() { throw typographyError('Reset typography rules instead. Keep the settings record and its history.', 405); },
+};
 const customPagesStore = createStore([], 'd16_custom_pages');
 const customPagesClient = {
   async list({ admin = false } = {}) {
@@ -436,6 +475,7 @@ const demoClient = {
     NavigationMenu: navigationMenuClient,
     DashboardLayout: dashboardLayoutStore,
     WebsiteIcons: websiteIconsStore,
+    WebsiteTypography: typographyClient,
     AboutPage: aboutPageStore,
     HeroSlide: heroSlidesStore,
     Stats: statsStore,
@@ -452,7 +492,7 @@ const demoClient = {
   },
 }
 
-const endpoints = { NavigationMenu: 'navigation-menu', DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
+const endpoints = { WebsiteTypography: 'website-typography', NavigationMenu: 'navigation-menu', DashboardLayout: 'dashboard-layout', WebsiteIcons: 'website-icons', AboutPage: 'about-page', HeroSlide: 'hero-slides', Stats: 'stats', Service: 'services', Project: 'projects', BlogPost: 'blog-posts', Consultation: 'consultations', ContactInfo: 'contact-info', User: 'users', GalleryVideo: 'gallery-videos', GalleryConcept: 'gallery-concepts', PicYourConcept: 'pic-your-concept', AuditLog: 'audit-logs' };
 const realClient = {
   entities: { ...Object.fromEntries(Object.entries(endpoints).map(([name, path]) => [name, createApiEntity(path)])), AccessControl: createApiEntity('access-control'), CustomPage: {
     ...createApiEntity('custom-pages'),

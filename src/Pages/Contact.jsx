@@ -124,8 +124,8 @@ function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
-        <div className="absolute inset-0 flex items-center justify-center">
+      <div data-d16-hero="page" className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
+        <div data-d16-hero-content className="absolute inset-0 flex items-center justify-center">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -159,7 +159,7 @@ function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
                   </p>
 
                   {submitted && (
-                    <div role="status" className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
+                    <div data-d16-text="body" role="status" className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
                       Thank you! Your consultation request has been saved. Our team can now review it.
                     </div>
                   )}
@@ -183,7 +183,7 @@ function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone">Phone Number *</Label>
-                        <div className="flex gap-2">
+                        <div className="d16-phone-fields flex min-w-0 gap-2">
                           <Select value={countryCode} onValueChange={setCountryCode}>
                             <SelectTrigger className="w-32">
                               <SelectValue />
@@ -202,7 +202,7 @@ function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.target.value)}
                             placeholder="1711288948"
-                            className="flex-1"
+                            className="min-w-0 flex-1"
                           />
                         </div>
                       </div>
@@ -333,7 +333,7 @@ function ContactForm({ galleryRequested, gallerySelection, selectionWarning }) {
                     We're located in the heart of Dhaka. Schedule a visit to our office to 
                     discuss your project in detail and explore our design portfolio.
                   </p>
-                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`} target="_blank" rel="noopener noreferrer" className="inline-block rounded-lg border border-white px-5 py-3 hover:bg-white hover:text-[var(--primary)]">Get Directions</a>
+                  <a data-d16-text="button" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`} target="_blank" rel="noopener noreferrer" className="inline-block rounded-lg border border-white px-5 py-3 hover:bg-white hover:text-[var(--primary)]">Get Directions</a>
                 </CardContent>
               </Card>
             </motion.div>

@@ -31,6 +31,7 @@ const CARDS = [
   { key: 'AdminLocations', title: 'Locations', description: 'Update office cities shown in the footer', icon: 'MapPin', color: 'bg-[var(--accent-dark)]' },
   { key: 'AdminSocialMedia', title: 'Social Media Links', description: 'Manage footer links and floating media buttons', icon: 'Share2', color: 'bg-[var(--primary-dark)]' },
   { key: 'AdminTheme', title: 'Theme Color', description: "Change the site's base brand color", icon: 'Palette', color: 'bg-[var(--primary)]' },
+  { key: 'AdminTypography', title: 'Fonts & Text Styles', description: 'Edit fonts, sizes, colors and styles across the website or for individual text', icon: 'Palette', color: 'bg-[var(--primary)]' },
   { key: 'AdminUsers', title: 'User Management', description: 'Verify emails and assign Admin/Super roles', icon: 'UserCog', color: 'bg-[var(--primary-dark)]' },
   { key: 'AdminAccessControl', title: 'Super User Access', description: 'Choose which sections Super Users can edit', icon: 'ShieldCheck', color: 'bg-[var(--primary)]' },
   { key: 'AdminIcons', title: 'Website Icons', description: 'Choose consistent icons for the website and dashboard', icon: 'Sparkles', color: 'bg-[var(--accent)]' },

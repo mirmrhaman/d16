@@ -92,12 +92,12 @@ test('UI wiring replaces the dialog with a selectable page and retains quote lin
   const link = readFileSync('src/Pages/catalogue/ConceptGalleryLink.jsx', 'utf8');
   const gallery = readFileSync('src/Pages/ConceptItemGallery.jsx', 'utf8');
   assert.match(detail, /catalogue === "PicYourConcept" && <ConceptGallery/);
-  assert.match(detail, /<Link to=\{contactUrl\} className=\{linkClass\}>Get a Quote/);
+  assert.match(detail, /<Link(?: data-d16-text="button")? to=\{contactUrl\} className=\{linkClass\}>Get a Quote/);
   assert.match(editor, /type="file" multiple/);
   assert.match(editor, /gallery_button_label/);
   assert.match(editor, /Move gallery photo/); assert.match(editor, /Remove gallery photo/);
   assert.match(link, /if \(!images.length\) return null/);
-  assert.match(link, /<Link to=\{conceptGalleryPath/);
+  assert.match(link, /<Link(?: data-d16-text="button")? to=\{conceptGalleryPath/);
   assert.doesNotMatch(gallery, /<dialog|<video|<iframe|GalleryVideo|showModal/);
   assert.match(gallery, /aria-pressed=\{selected\}/); assert.match(gallery, /togglePhotoSelection/);
   assert.match(gallery, /disabled=\{!selected.length\}/);

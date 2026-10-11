@@ -52,6 +52,7 @@ export const STATIC_ICON_SLOTS = [
     ['dashboard.AdminLocations', 'Locations', 'MapPin'],
     ['dashboard.AdminSocialMedia', 'Social Media Links', 'Share2'],
     ['dashboard.AdminTheme', 'Theme Color', 'Palette'],
+    ['dashboard.AdminTypography', 'Fonts & Text Styles', 'Palette'],
     ['dashboard.AdminUsers', 'User Management', 'UserCog'],
     ['dashboard.AdminAccessControl', 'Super User Access', 'ShieldCheck'],
     ['dashboard.AdminIcons', 'Website Icons', 'Sparkles'],

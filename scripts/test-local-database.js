@@ -111,6 +111,25 @@ try {
   assert.equal((await request('/auth/me')).body.user.id, admin.id);
   console.log('PASS: real cookie login, public/private boundaries and origin checks');
 
+  // Independent typography singleton: no migration seeds or existing content
+  // are replaced when an administrator first configures public fonts.
+  const { TYPOGRAPHY_ID, DEFAULT_TYPOGRAPHY } = await import('../server/src/typographySchema.js');
+  const typographyRule = { id: 'test-title', page: '/About', target: 'title', text: 'About Us', style: { fontFamily: 'lato', fontSize: '1.5rem', color: '#123456', fontStyle: 'italic' } };
+  assert.deepEqual((await request('/website-typography', 'GET', undefined, '')).body, []);
+  assert.equal((await request('/website-typography', 'POST', { ...DEFAULT_TYPOGRAPHY, rules: [typographyRule] }, '')).status, 401);
+  const typographyCreated = await request('/website-typography', 'POST', { ...DEFAULT_TYPOGRAPHY, rules: [typographyRule] });
+  assert.equal(typographyCreated.status, 201, JSON.stringify(typographyCreated.body));
+  assert.equal(typographyCreated.body.id, TYPOGRAPHY_ID);
+  assert.deepEqual((await request('/website-typography', 'GET', undefined, '')).body[0].rules, [typographyRule]);
+  assert.equal((await request(`/website-typography/${TYPOGRAPHY_ID}`, 'PUT', { version: 1, rules: [{ ...typographyRule, style: { color: 'url(unsafe)' } }] })).status, 400);
+  assert.equal((await request(`/website-typography/${TYPOGRAPHY_ID}`, 'PUT', { version: 1, rules: [] })).status, 200);
+  assert.equal((await request(`/website-typography/${TYPOGRAPHY_ID}`, 'PUT', { version: 1, rules: [typographyRule] })).status, 409);
+  assert.equal((await request(`/website-typography/${TYPOGRAPHY_ID}`, 'DELETE', {})).status, 405);
+  const [[typographyAudit]] = await database.query("SELECT actor_user_id, created_at, new_data FROM audit_logs WHERE entity_name='WebsiteTypography' AND entity_id=? ORDER BY created_at DESC LIMIT 1", [TYPOGRAPHY_ID]);
+  assert.equal(typographyAudit.actor_user_id, admin.id); assert(typographyAudit.created_at);
+  assert.deepEqual((await request('/website-typography')).body[0].rules, []);
+  console.log('PASS: typography round-trip, public reads, authenticated saves, unsafe/stale rejection, reset and attributed history');
+
   assert.equal((await request('/dashboard-layout', 'GET', undefined, '')).status, 401);
   assert.equal((await request('/website-icons', 'GET', undefined, '')).status, 200);
   assert.equal((await request('/navigation-menu', 'GET', undefined, '')).status, 200);

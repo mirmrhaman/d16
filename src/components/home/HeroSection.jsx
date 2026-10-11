@@ -47,10 +47,10 @@ export default function HeroSection() {
   const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % slides.length);
   const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
 
-  if (savedSlides && slides.length === 0) return <section className="flex min-h-[60vh] items-center justify-center bg-[var(--primary)] px-6 text-center text-white"><div><h1 className="mb-5 text-4xl font-bold">Where Space meets Style</h1><p className="mb-8 text-lg">Thoughtful interior design, shaped around you.</p><Link to={createPageUrl("Contact")} className="inline-block rounded-md bg-[var(--accent)] px-7 py-4 font-semibold">Book Consultation</Link></div></section>;
+  if (savedSlides && slides.length === 0) return <section className="flex min-h-[60vh] items-center justify-center bg-[var(--primary)] px-6 text-center text-white"><div><h1 className="mb-5 text-4xl font-bold">Where Space meets Style</h1><p className="mb-8 text-lg">Thoughtful interior design, shaped around you.</p><Link data-d16-text="button" to={createPageUrl("Contact")} className="inline-block rounded-md bg-[var(--accent)] px-7 py-4 font-semibold">Book Consultation</Link></div></section>;
 
   return (
-    <div className="relative h-[calc(100svh-5rem)] min-h-[38rem] overflow-hidden md:min-h-[40rem]" role="region" aria-roledescription="carousel" aria-label="Featured interior design" aria-busy={isLoading}>
+    <div data-d16-hero="carousel" className="relative h-[calc(100svh-5rem)] min-h-[38rem] overflow-hidden md:min-h-[40rem]" role="region" aria-roledescription="carousel" aria-label="Featured interior design" aria-busy={isLoading}>
       <AnimatePresence mode="wait">
         <motion.div
           key={slideIndex}
@@ -58,7 +58,7 @@ export default function HeroSection() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: reducedMotion ? 0 : 1, ease: "easeInOut" }}
-          className="absolute inset-0"
+          data-d16-hero-slide className="absolute inset-0"
         >
           <div 
             className="absolute inset-0 bg-cover bg-center"
@@ -66,7 +66,7 @@ export default function HeroSection() {
           />
           {/* Removed blue gradient overlay - images now display clearly */}
           
-          <div className="relative h-full flex items-center">
+          <div data-d16-hero-content className="relative h-full flex items-center">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
               <motion.div
                 initial={{ opacity: 0, y: 30 }}
@@ -101,7 +101,7 @@ export default function HeroSection() {
                     animate={reducedMotion ? {} : { scale: [1, 1.05, 1], opacity: [0.8, 1, 0.8] }}
                     transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                   >
-                    <span className="text-white text-base md:text-lg font-semibold tracking-wide">
+                    <span data-d16-text="description" className="text-white text-base md:text-lg font-semibold tracking-wide">
                       Where <span className="text-[var(--accent)]">Space</span> meets <span className="text-[var(--accent)]">Style</span>
                     </span>
                   </motion.div>

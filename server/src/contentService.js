@@ -6,6 +6,7 @@ import { writeAudit } from "./auditService.js";
 import { validateCustomPage } from "./customPageSchema.js";
 import { validateSocialLinks, validateFloatingSocial, normalizeSocialMedia } from "./socialMediaSchema.js";
 import { validateConceptGallery, CONCEPT_GALLERY_FIELDS } from "./conceptGallerySchema.js";
+import { TYPOGRAPHY_ID, validateTypography } from "./typographySchema.js";
 
 const publicFields = {
   HeroSlide: ["title", "subtitle", "image", "order", "active"],
@@ -20,6 +21,7 @@ const publicFields = {
   AboutPage: ["title", "subtitle", "hero_image", "philosophy_title", "philosophy_text", "philosophy_detail", "mission_summary", "philosophy_image", "approach_title", "approach_subtitle", "approach_steps", "principles_title", "principles_subtitle", "vision_title", "vision_text", "mission_title", "mission_text", "team_title", "team_subtitle", "team_members"],
   DashboardLayout: ["title", "card_order"],
   WebsiteIcons: ["title", "icons"],
+  WebsiteTypography: ["title", "rules"],
   NavigationMenu: ["title", "items", "dropdown_enabled", "dropdown_label"],
   CustomPage: ["title", "page_type", "intro", "body", "hero_image", "items", "published"],
 };
@@ -27,10 +29,10 @@ export const ABOUT_PAGE_ID = "8c3de170-4be7-4e45-9f3d-618d0b20c613";
 export const DASHBOARD_LAYOUT_ID = "79310606-6485-4cc3-ab09-d99d08d67f5e";
 export const WEBSITE_ICONS_ID = "fb68d11f-55bc-4e6b-942f-f784dcb0c912";
 export const NAVIGATION_MENU_ID = "a7bf2755-1d82-4c2e-9ad3-729f04c565d1";
-const singletonIds = { AboutPage: ABOUT_PAGE_ID, DashboardLayout: DASHBOARD_LAYOUT_ID, WebsiteIcons: WEBSITE_ICONS_ID, NavigationMenu: NAVIGATION_MENU_ID };
+const singletonIds = { AboutPage: ABOUT_PAGE_ID, DashboardLayout: DASHBOARD_LAYOUT_ID, WebsiteIcons: WEBSITE_ICONS_ID, NavigationMenu: NAVIGATION_MENU_ID, WebsiteTypography: TYPOGRAPHY_ID };
 const appearanceEntities = new Set(["DashboardLayout", "WebsiteIcons"]);
-const versionedConfigurations = new Set([...appearanceEntities, "NavigationMenu", "CustomPage"]);
-const dashboardCards = new Set(["AdminAbout", "AdminHistory", "AdminHeroSlides", "AdminStats", "AdminServices", "AdminProjects", "AdminGallery", "AdminPicYourConcept", "AdminBlog", "AdminConsultations", "AdminContactInfo", "AdminLogo", "AdminLocations", "AdminSocialMedia", "AdminTheme", "AdminUsers", "AdminAccessControl", "AdminIcons", "AdminNavigation"]);
+const versionedConfigurations = new Set([...appearanceEntities, "NavigationMenu", "CustomPage", "WebsiteTypography"]);
+const dashboardCards = new Set(["AdminAbout", "AdminHistory", "AdminHeroSlides", "AdminStats", "AdminServices", "AdminProjects", "AdminGallery", "AdminPicYourConcept", "AdminBlog", "AdminConsultations", "AdminContactInfo", "AdminLogo", "AdminLocations", "AdminSocialMedia", "AdminTheme", "AdminUsers", "AdminAccessControl", "AdminIcons", "AdminNavigation", "AdminTypography"]);
 const navigationPages = new Set(["Home", "About", "Services", "Portfolio", "PicYourConcept", "Gallery", "Blog", "Contact"]);
 // Kept server-side so API deployments do not depend on frontend source files.
 // Tests verify parity with the public icon picker; no arbitrary component names.
@@ -153,6 +155,10 @@ export const cleanPublicPayload = (entity, payload, previous = {}) => {
   }
   assertSafeJson(result);
   if (Buffer.byteLength(JSON.stringify(result)) > 1024 * 1024) throw errorWithStatus("Content is too large", 400);
+  if (canonical === "WebsiteTypography") {
+    try { return validateTypography(result); }
+    catch (error) { throw errorWithStatus(error.message, 400); }
+  }
   if (canonical === "CustomPage") {
     try { return validateCustomPage(result); }
     catch (error) { throw errorWithStatus(error.message, 400); }

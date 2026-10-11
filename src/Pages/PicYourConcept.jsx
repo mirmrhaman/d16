@@ -39,7 +39,7 @@ export default function PicYourConcept() {
                   className="group block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]"
                 >
                   <div className="aspect-square overflow-hidden rounded-2xl"><img src={concept.image} alt={concept.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-125" /></div>
-                  <h2 className="mt-3 text-center text-base font-semibold text-[var(--primary)]">{concept.title}</h2>
+                  <h2 data-d16-text="card-title" className="mt-3 text-center text-base font-semibold text-[var(--primary)]">{concept.title}</h2>
                 </Link>
               ))}
             </div>

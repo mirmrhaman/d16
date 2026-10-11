@@ -30,8 +30,8 @@ export default function Portfolio() {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
-        <div className="absolute inset-0 flex items-center justify-center">
+      <div data-d16-hero="page" className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
+        <div data-d16-hero-content className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-white px-4">
             <motion.h1 
               initial={{ opacity: 0, y: 30 }}
@@ -125,13 +125,13 @@ export default function Portfolio() {
                       
                       <div className="space-y-2 mb-4">
                         {project.location && (
-                          <div className="flex items-center text-sm text-gray-600">
+                          <div data-d16-text="small" className="flex items-center text-sm text-gray-600">
                             <MapPin size={16} className="mr-2 text-[var(--accent)]" />
                             <span>{project.location}</span>
                           </div>
                         )}
                         {project.area && (
-                          <div className="flex items-center text-sm text-gray-600">
+                          <div data-d16-text="small" className="flex items-center text-sm text-gray-600">
                             <Maximize size={16} className="mr-2 text-[var(--accent)]" />
                             <span>{project.area}</span>
                           </div>

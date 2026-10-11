@@ -12,6 +12,8 @@ import { IS_DEMO } from '@/api/transport';
 import { base44 } from '@/api/base44Client';
 import { NAVIGATION_MENU_ID, visibleNavigationItems, normalizeNavigationSettings, groupNavigationItems } from '@/data/navigation';
 import FloatingSocialLinks from '@/components/FloatingSocialLinks';
+import SiteTypography from '@/components/SiteTypography';
+import { isPublicTypographyPath } from '@/data/typography';
 import { normalizeSocialMedia } from '../server/src/socialMediaSchema.js';
 
 const DEFAULT_THEME_COLOR = "#112037";
@@ -58,6 +60,7 @@ export default function Layout({ children }) {
   const [headerHeight, setHeaderHeight] = useState(80);
   const [navigationScroll, setNavigationScroll] = useState({ overflow: false, previous: false, next: false });
   const headerRef = useRef(null);
+  const typographyRootRef = useRef(null);
   const closedHeaderRef = useRef(null);
   const mobileToggleRef = useRef(null);
   const navigationScrollerRef = useRef(null);
@@ -254,7 +257,8 @@ export default function Layout({ children }) {
   const isActive = (url) => location.pathname === url || (url !== '/' && location.pathname.startsWith(`${url}/`));
 
   return (
-    <div className="min-h-screen bg-white">
+    <div ref={typographyRootRef} data-d16-public={isPublicTypographyPath(location.pathname) ? '' : undefined} className="min-h-screen bg-white">
+      <SiteTypography pathname={location.pathname} rootRef={typographyRootRef} />
       {authError && user && <p role="alert" className="bg-red-50 text-red-800 p-3 text-center">{authError}</p>}
       <style>{`
         :root {
@@ -295,7 +299,7 @@ export default function Layout({ children }) {
         }
       }} className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] shadow-lg">
         <div ref={closedHeaderRef} className="mx-auto w-full px-4 sm:px-6 lg:px-5 2xl:px-8">
-          <div className="flex h-20 flex-nowrap items-center justify-between gap-3 lg:gap-4">
+          <div className="d16-header-row flex h-20 flex-nowrap items-center justify-between gap-3 lg:gap-4">
             {/* Logo */}
             <Link to={createPageUrl("Home")} className="flex shrink-0 items-center group">
               <img 

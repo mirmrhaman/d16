@@ -147,8 +147,8 @@ export default function Gallery() {
       </AnimatePresence>
 
       {/* Hero Section */}
-      <div className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
-        <div className="absolute inset-0 flex items-center justify-center">
+      <div data-d16-hero="page" className="relative h-[40vh] md:h-[50vh] overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)]">
+        <div data-d16-hero-content className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-white px-4">
             <motion.h1 
               initial={{ opacity: 0, y: 30 }}
@@ -211,7 +211,7 @@ export default function Gallery() {
                         <Play className="text-[var(--primary)] ml-1" size={32} />
                       </div>
                     </div>
-                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-sm px-2 py-1 rounded">
+                    <div data-d16-text="small" className="absolute bottom-2 right-2 bg-black/70 text-white text-sm px-2 py-1 rounded">
                       {video.duration}
                     </div>
                   </div>

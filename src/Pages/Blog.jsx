@@ -26,14 +26,14 @@ export default function Blog() {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="relative h-[40vh] md:h-[50vh] overflow-hidden">
+      <div data-d16-hero="page" className="relative h-[40vh] md:h-[50vh] overflow-hidden">
         <img 
           src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1600&q=80"
           alt="Blog"
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--primary)]/80 to-[var(--primary)]/50" />
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div data-d16-hero-content className="absolute inset-0 flex items-center justify-center">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -92,7 +92,7 @@ export default function Blog() {
                     <CardContent className="p-6">
                       <div className="flex flex-wrap items-center gap-3 mb-4">
                         {(post.published_date || post.published_at) && (
-                          <div className="flex items-center text-sm text-gray-500">
+                          <div data-d16-text="small" className="flex items-center text-sm text-gray-500">
                             <Calendar size={14} className="mr-1" />
                             {format(new Date(post.published_date || post.published_at), 'MMM d, yyyy')}
                           </div>
@@ -113,7 +113,7 @@ export default function Blog() {
                       )}
 
                       {post.author && (
-                        <div className="flex items-center text-sm text-gray-500 mb-4">
+                        <div data-d16-text="small" className="flex items-center text-sm text-gray-500 mb-4">
                           <User size={14} className="mr-1" />
                           {post.author}
                         </div>

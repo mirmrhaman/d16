@@ -22,12 +22,16 @@ Apply, in this order:
 2. `database/migrations/002_section_permissions.sql`
 3. `database/migrations/003_about_page.sql`
 4. `database/migrations/004_dashboard_icons.sql`
+5. `database/migrations/005_navigation.sql`
+6. `database/migrations/006_consultation_inbox.sql`
 
 The migrations retain native tables and seed richer public CMS content without overwriting existing app-content rows. The second and third migrations do not restore revoked section permissions on a sequential rerun. The third migration adds the About page and its section permission; its sample team profiles need client approval or replacement in Admin About before release. Avoid concurrent migration runners.
 
 Optional `seed.qa.synthetic.mysql.sql` is for a fresh disposable test database, BEFORE migrations. It contains placeholder images and is not real business content. Do not import it over a populated QA site merely to make row-count checks pass.
 
 Migration 004 adds separate dashboard-layout and website-icon settings without overwriting saved values. Dashboard layout reads and writes require an administrator. Public pages can read website icons; only administrators can change them. Layout and icon updates require the loaded record version and are audited. Custom icons use the same persistent image upload configuration as other public photos.
+
+Migration 006 adds encrypted, append-only consultation notes and manually logged replies. Back up QA before applying it. The inbox does not deliver email/SMS/social messages; staff must send externally and explicitly mark a reply as already sent before recording it. Do not use the demo browser preview for real client details.
 
 ## 3. Configure server-only secrets
 

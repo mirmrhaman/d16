@@ -70,7 +70,7 @@ required_tables=(
   organization_profile organization_locations hero_slides
   stats services service_features projects project_gallery_images
   blog_posts gallery_videos gallery_concepts gallery_concept_features audit_logs
-  consultation_requests user_role_assignments mfa_methods mfa_challenges auth_sessions
+  consultation_requests consultation_messages user_role_assignments mfa_methods mfa_challenges auth_sessions
   app_content app_private_details app_schema_migrations
 )
 

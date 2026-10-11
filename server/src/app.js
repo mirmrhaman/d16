@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { createAuthService, SECTION_PERMISSIONS } from './authService.js';
 import { httpError, lookupHash, validateSecurityConfig } from './security.js';
+import { createConsultationInboxService } from './consultationInboxService.js';
 import { isPublishedCustomPage } from './customPageSchema.js';
 
 const COOKIE = 'd16_session';
@@ -76,6 +77,7 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
     if (section && req.user.role !== 'admin' && !req.user.permissions.includes(SECTION_PERMISSIONS[section])) return next(httpError(403, 'Your account does not have access to this content section.'));
     next();
   };
+  const inbox = createConsultationInboxService({ pool });
 
   // Single-instance QA limiter. Production needs a shared rate-limit store.
   const limits = new Map();
@@ -123,6 +125,8 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
   app.get('/api/audit-logs', authenticate, permit('users.manage'), asyncRoute(async (req, res) => res.json(await auth.listAuditLogs(req.query))));
   app.get('/api/access-control', authenticate, asyncRoute(async (_req, res) => res.json(await auth.listAccessControl())));
   app.put('/api/access-control/:id', authenticate, permit('users.manage'), asyncRoute(async (req, res) => res.json(await auth.updateAccessControl(req.params.id, req.body, actorFor(req)))));
+  app.get('/api/consultations/:id/messages', authenticate, permit('consultations.read'), asyncRoute(async (req, res) => res.json(await inbox.listMessages(req.params.id))));
+  app.post('/api/consultations/:id/messages', authenticate, permit('consultations.write'), asyncRoute(async (req, res) => res.status(201).json(await inbox.addMessage(req.params.id, req.body, actorFor(req)))));
 
   for (const [endpoint, entity, permission] of routes) {
     app.get(`/api/${endpoint}`, asyncRoute(async (req, res) => {

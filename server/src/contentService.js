@@ -334,7 +334,19 @@ export const createContentRepository = ({ database, encrypt = encryptText, decry
     const projectType = merged.project_type || null;
     if (projectType && !["residential", "commercial", "restaurant", "office", "other"].includes(projectType)) throw errorWithStatus("Invalid project type", 400);
     const assigned = actor?.userId ? merged.assigned_to_user_id || null : null;
-    if (assigned) assertId(assigned);
+    if (assigned) {
+      assertId(assigned);
+      const [eligible] = await connection.execute(
+        `SELECT u.id FROM users u
+         JOIN user_role_assignments ura ON ura.user_id = u.id
+         JOIN role_permissions rp ON rp.role_id = ura.role_id
+         JOIN permissions p ON p.id = rp.permission_id
+         WHERE u.id = ? AND u.is_active = 1 AND u.is_verified = 1 AND u.deleted_at IS NULL
+           AND p.permission_key IN ('consultations.read', 'consultations.write')
+         GROUP BY u.id HAVING COUNT(DISTINCT p.permission_key) = 2`, [assigned],
+      );
+      if (!eligible[0]) throw errorWithStatus("Assign this request to an active team member with consultation read and reply permissions.", 400);
+    }
     const details = Object.fromEntries(["location", "budget", "message", "preferred_date"].map((field) => [field, merged[field] || ""]));
     details.project_type = projectType;
     const values = [encrypt(merged.full_name, context("Consultation", id, "full_name")), encrypt(merged.email, context("Consultation", id, "email")), encrypt(merged.phone, context("Consultation", id, "phone")), hash(merged.email.trim().toLowerCase()), hash(merged.phone.replace(/\s/g, "")), null, status, assigned];

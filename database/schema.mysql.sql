@@ -6,7 +6,7 @@
 -- * Store all DATETIME values in UTC; this replaces PostgreSQL TIMESTAMPTZ.
 -- * Encrypt *_ciphertext values in the application with a KMS-managed key.
 -- * Do not store plaintext passwords, session tokens, or OTP codes.
--- * For a fresh installation, apply database/migrations/001 through 005 after
+-- * For a fresh installation, apply database/migrations/001 through 006 after
 --   this native schema. The CMS navigation lives in app_content, initialized by
 --   001_secure_content.sql and seeded by 005_navigation.sql; no duplicate table
 --   is needed. Existing installations should apply only pending migrations.
@@ -296,6 +296,23 @@ CREATE TABLE IF NOT EXISTS consultation_requests (
   KEY idx_consultation_assigned_to (assigned_to_user_id),
   CONSTRAINT fk_consultations_created_by FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_consultations_assigned_to FOREIGN KEY (assigned_to_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Append-only staff notes and manually logged replies. Message text is encrypted
+-- by the application; this table never sends email/SMS/social messages itself.
+CREATE TABLE IF NOT EXISTS consultation_messages (
+  id CHAR(36) CHARACTER SET ascii NOT NULL,
+  consultation_id CHAR(36) CHARACTER SET ascii NOT NULL,
+  actor_user_id CHAR(36) CHARACTER SET ascii NULL,
+  message_kind ENUM('note', 'reply') NOT NULL,
+  channel ENUM('internal', 'email', 'sms', 'whatsapp', 'social') NOT NULL,
+  delivery_status ENUM('internal', 'logged_manual') NOT NULL,
+  body_ciphertext MEDIUMBLOB NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_consultation_messages_thread (consultation_id, created_at, id),
+  CONSTRAINT fk_consultation_messages_request FOREIGN KEY (consultation_id) REFERENCES consultation_requests(id) ON DELETE CASCADE,
+  CONSTRAINT fk_consultation_messages_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS gallery_videos (

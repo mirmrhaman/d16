@@ -4,7 +4,7 @@ import { IS_DEMO } from '@/api/transport';
 import { canEditSection, adminLanding } from '@/api/permissions';
 import { useAuth } from "@/context/AuthContext";
 
-export default function RequireAuth({ allowedRoles = [], featureKey, children }) {
+export default function RequireAuth({ allowedRoles = [], requiredPermissions = [], featureKey, children }) {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -22,6 +22,10 @@ export default function RequireAuth({ allowedRoles = [], featureKey, children })
 
   if (allowedRoles.length && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
+  }
+
+  if (requiredPermissions.length && !requiredPermissions.every((permission) => user.permissions?.includes(permission))) {
+    return <Navigate to={adminLanding(user, IS_DEMO)} replace />;
   }
 
   if (featureKey && !canEditSection(user, featureKey, IS_DEMO)) {

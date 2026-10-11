@@ -137,7 +137,7 @@ export default function App() {
       <Route
         path="/AdminConsultations"
         element={
-          <RequireAuth allowedRoles={['admin']}>
+          <RequireAuth allowedRoles={['admin', 'super']} requiredPermissions={['consultations.read']}>
             <Layout><AdminConsultations /></Layout>
           </RequireAuth>
         }

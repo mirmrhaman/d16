@@ -347,6 +347,21 @@ CREATE TABLE consultation_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Application-encrypted internal notes and manually logged replies. This is
+-- history only; outbound delivery is deliberately not performed by the schema.
+CREATE TABLE consultation_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultation_id UUID NOT NULL REFERENCES consultation_requests(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  message_kind TEXT NOT NULL CHECK (message_kind IN ('note', 'reply')),
+  channel TEXT NOT NULL CHECK (channel IN ('internal', 'email', 'sms', 'whatsapp', 'social')),
+  delivery_status TEXT NOT NULL CHECK (delivery_status IN ('internal', 'logged_manual')),
+  body_ciphertext BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_consultation_messages_thread ON consultation_messages(consultation_id, created_at, id);
+
 CREATE INDEX idx_consultation_status ON consultation_requests(status);
 CREATE INDEX idx_consultation_created_at ON consultation_requests(created_at DESC);
 CREATE INDEX idx_consultation_email_hash ON consultation_requests(email_hash);

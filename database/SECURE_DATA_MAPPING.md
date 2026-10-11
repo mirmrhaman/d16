@@ -14,6 +14,7 @@ ContactInfo uses `organization_profile` and `organization_locations`, with publi
 
 - Users: email/phone encrypted; passwords salted and hashed using scrypt; session tokens stored only as SHA-256 hashes.
 - Consultations: name/email/phone encrypted in their native columns. Location, budget, message, preferred date and project type encrypted together in app_private_details; plaintext legacy columns are NULL for new writes.
+- Consultation conversation entries: note/reply content encrypted separately per entry in `consultation_messages`; actor, channel, type and UTC timestamp remain queryable for history. Reply entries are only manually logged after sending elsewhere; there is no outbound delivery integration.
 - Only operational status, assignments, timestamps and record identifiers remain unencrypted for consultations.
 - Team display names are visible to administrators and stored as display_name; do not put private biographical information there. Public business addresses, portfolio locations, service descriptions and published media URLs are intentionally public. Never paste client confidential information into public CMS fields.
 - MFA provider enrollment/challenges are not implemented. Existing MFA-enabled accounts fail closed.

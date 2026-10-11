@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SOURCE_DIRECTORIES = ['dist', 'server/src', 'database/migrations'];
-const SOURCE_FILES = ['package.json', 'package-lock.json', 'database/schema.mysql.sql'];
+const SOURCE_FILES = ['app.js', 'package.json', 'package-lock.json', 'database/schema.mysql.sql'];
 const STATIC_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.css', '.json', '.txt', '.xml', '.webmanifest', '.wasm', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf', '.mp4', '.webm']);
 const EXCLUDED_DIRECTORIES = new Set(['node_modules', 'uploads', 'backups', 'backup', 'dumps', 'secrets', 'credentials', 'coverage']);
 const hashBytes = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -90,6 +90,7 @@ export async function collectReleaseFiles(projectRoot = process.cwd()) {
   }
   if (!files.some((file) => file.path === 'dist/index.html')) throw new Error('Build the frontend first: dist/index.html is required');
   if (!files.some((file) => file.path === 'server/src/index.js')) throw new Error('server/src/index.js is required');
+  if (!files.some((file) => file.path === 'app.js')) throw new Error('app.js is required as the cPanel Passenger startup file');
   if (!files.some((file) => file.path.startsWith('database/migrations/'))) throw new Error('At least one numbered SQL migration is required');
   return files.sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }

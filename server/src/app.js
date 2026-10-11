@@ -28,9 +28,12 @@ const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons', 'NavigationM
 const entitySections = { HeroSlide: 'HeroSlides', Stats: 'Stats', Service: 'Services', Project: 'Projects', BlogPost: 'Blog', GalleryVideo: 'Gallery', GalleryConcept: 'Gallery', PicYourConcept: 'PicYourConcept', AboutPage: 'About' };
 const unavailableCodes = new Set(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'ER_ACCESS_DENIED_ERROR', 'ER_NO_SUCH_TABLE']);
 
-export function createApp({ pool, content, auth = createAuthService({ pool }), upload, allowedOrigins, secureCookies = process.env.NODE_ENV === 'production' || process.env.D16_SECURE_COOKIES === 'true' }) {
+export function createApp({ pool, content, auth = createAuthService({ pool }), upload, webRoot, allowedOrigins, secureCookies = process.env.NODE_ENV === 'production' || process.env.D16_SECURE_COOKIES === 'true' }) {
   const app = express();
   app.disable('x-powered-by');
+  // cPanel Passenger proxies to the Node process locally. Trust only that local
+  // proxy so client IPs remain useful for audit records and request limits.
+  app.set('trust proxy', 'loopback');
   const origins = new Set(allowedOrigins || (process.env.D16_ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,http://127.0.0.1:8787').split(',').map((value) => value.trim()).filter(Boolean));
   for (const origin of origins) {
     if (new URL(origin).origin !== origin) throw new Error('D16_ALLOWED_ORIGINS must contain complete origins without paths.');
@@ -179,6 +182,20 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
     }));
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
+  if (webRoot) {
+    app.use(express.static(webRoot, {
+      dotfiles: 'deny',
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (path.extname(filePath).toLowerCase() === '.html') res.set('Cache-Control', 'no-cache');
+      },
+    }));
+    app.get('*', (req, res, next) => {
+      if (req.path === '/api' || req.path.startsWith('/api/') || req.path === '/uploads' || req.path.startsWith('/uploads/')) return next();
+      if (!req.accepts('html')) return next();
+      res.sendFile(path.join(webRoot, 'index.html'));
+    });
+  }
   app.use((error, _req, res, next) => {
     if (res.headersSent) return next(error);
     const status = error.status || (unavailableCodes.has(error.code) ? 503 : 500);

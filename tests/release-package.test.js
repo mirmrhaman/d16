@@ -16,6 +16,7 @@ async function fixture(t) {
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, contents);
   }
+  await put('app.js', "import { startServer } from './server/src/index.js'; startServer();");
   await put('package.json', '{"name":"synthetic-d16","version":"0.0.0"}');
   await put('package-lock.json', '{"lockfileVersion":3}');
   await put('dist/index.html', '<h1>Synthetic D16 release</h1>');
@@ -41,7 +42,7 @@ test('release collector includes only built frontend, runtime, package files and
   for (const name of ['.env', '.env.production', '.git/config', 'database/.env.qa.local', 'database/production.dump.sql', 'database/seed.qa.synthetic.mysql.sql', 'uploads/client.png', 'node_modules/dependency/index.js', 'server/src/.env', 'server/src/credentials.json', 'server/src/private.key', 'server/src/local-secrets.js', 'server/src/uploads/client.jpg', 'dist/.env', 'dist/credentials.json', 'dist/secrets.js', 'dist/client-backup.json', 'dist/db-dump.json', 'dist/dump.sql', 'dist/database.db', 'dist/backup.tar.gz', 'dist/uploads/client.jpg', 'dist/node_modules/package/index.js', 'dist/assets/app.js.map']) await put(name, 'MUST NEVER BE PACKAGED');
   const files = await collectReleaseFiles(root);
   assert.deepEqual(files.map((file) => file.path).sort(), [
-    'database/migrations/001_example.sql', 'database/schema.mysql.sql', 'dist/_redirects', 'dist/assets/app.js', 'dist/index.html', 'package-lock.json', 'package.json', 'server/src/index.js',
+    'app.js', 'database/migrations/001_example.sql', 'database/schema.mysql.sql', 'dist/_redirects', 'dist/assets/app.js', 'dist/index.html', 'package-lock.json', 'package.json', 'server/src/index.js',
   ].sort());
   for (const file of files) {
     assert.equal(file.size, file.bytes.length);

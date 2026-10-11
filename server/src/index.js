@@ -15,10 +15,14 @@ export async function startServer() {
     const { writeAudit } = await import('./auditService.js');
     await writeAudit(pool, { actor, action: 'upload.create', entityName: 'media_assets', entityId: id, changedFields: ['image'] });
   } });
-  const app = createApp({ pool, content, upload });
+  const webRoot = fileURLToPath(new URL('../../dist/', import.meta.url));
+  const app = createApp({ pool, content, upload, webRoot });
   const port = Number(process.env.PORT || 8787);
-  const host = process.env.D16_BIND_HOST || '127.0.0.1';
-  return app.listen(port, host, () => console.log(`[d16-api] listening at ${host}:${port} (database mode)`));
+  const host = process.env.D16_BIND_HOST;
+  const onListening = () => console.log(`[d16-api] listening on ${port} (database mode)`);
+  // Passenger assigns PORT and proxies to the application. Leave the host
+  // unset in that environment; local reverse-proxy deployments may pin it.
+  return host ? app.listen(port, host, onListening) : app.listen(port, onListening);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

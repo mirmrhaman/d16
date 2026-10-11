@@ -10,6 +10,10 @@ Use same-origin HTTPS routing: the browser calls `/api`, which is routed to the 
 
 Cross-site cookie authentication is intentionally not enabled. A separate API hostname must be same-site and correctly configured, or exposed through a reviewed same-origin reverse proxy.
 
+For DianaHost cPanel, the approved QA hostname is `qa.d16interior.com`; its separate document root is `/home/dinterio/qa.d16interior.com`. HTTPS has been provisioned. The hostname alone is not the running QA application. Use cPanel's **Application Manager** (Passenger) if available, with Node.js 22, application URL `https://qa.d16interior.com/`, application root in the account home directory (not inside the public document root), startup file `app.js`, and production dependencies installed from `package-lock.json`. `app.js` serves the built `dist/` site and `/api` from one HTTPS origin. Let Passenger provide `PORT`; leave `D16_BIND_HOST` unset for Passenger. If Application Manager or environment-variable support is missing, ask DianaHost support whether Passenger Node.js apps and app environment variables are enabled on the plan.
+
+Do not enable client testing until `/api/health` reports HTTP 200 with QA database mode, the static directory listing is gone, sign-in works over HTTPS, and a test record has been confirmed in QA. The GitHub Pages client preview remains demo-only and is not the hosted persistent QA environment.
+
 ## 2. Back up QA, then prepare schema
 
 Export the existing QA database first. In phpMyAdmin, explicitly select `dinterio_d16_qa`.
@@ -41,7 +45,7 @@ Required: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, APP_ENCRYPTION_KEY_BA
 
 The two encryption/lookup keys must be DIFFERENT cryptographically random 32-byte values encoded in base64. Generate and store them in your approved secret store, never in chat, browser code, SQL seeds, Git, or VITE_* variables. Preserve encrypted backups of the keys separately from database backups. Changing/deleting the key without a migration makes stored confidential data unreadable. KMS integration and key rotation remain release prerequisites, not completed features.
 
-For HTTPS QA set `D16_SECURE_COOKIES=true`. Set `D16_ALLOWED_ORIGINS` to exact trusted origins without paths. Keep `D16_BIND_HOST=127.0.0.1` behind a reverse proxy. Remote database connections require verified TLS; use DB_SSL_CA_FILE if your provider requires its CA. TLS certificate verification is never disabled.
+For HTTPS QA set `D16_SECURE_COOKIES=true`. Set `D16_ALLOWED_ORIGINS` to exact trusted origins without paths. Under cPanel Passenger leave `D16_BIND_HOST` unset so the app listens on the port assigned by Passenger. For a separately managed reverse proxy, bind to the provider's required local interface. Remote database connections require verified TLS; use DB_SSL_CA_FILE if your provider requires its CA. TLS certificate verification is never disabled.
 
 Persistent uploads need an absolute `D16_UPLOAD_DIR` outside your source/deployment folder and an HTTPS `D16_PUBLIC_UPLOAD_BASE_URL` pointing to its served public path. Only PNG/JPEG/WebP images up to 5 MB are supported. Use trusted hosted URLs for videos; video-file upload is not implemented.
 

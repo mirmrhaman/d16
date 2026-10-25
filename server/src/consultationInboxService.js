@@ -16,7 +16,7 @@ const toMessage = (row) => ({
   created_at: row.created_at instanceof Date ? row.created_at.toISOString() : `${String(row.created_at).replace(' ', 'T').replace(/Z$/, '')}Z`,
 });
 
-export function createConsultationInboxService({ pool }) {
+export function createConsultationInboxService({ pool, emailService }) {
   async function listMessages(consultationId) {
     if (!uuidPattern.test(String(consultationId))) throw httpError(400, 'Invalid consultation ID.');
     const [rows] = await pool.execute(
@@ -70,5 +70,66 @@ export function createConsultationInboxService({ pool }) {
     return rows[0] ? toMessage(rows[0]) : null;
   }
 
-  return { listMessages, addMessage };
+  async function sendEmailReply(consultationId, { to, body }, actor) {
+    if (!uuidPattern.test(String(consultationId))) throw httpError(400, 'Invalid consultation ID.');
+    if (typeof body !== 'string' || !body.trim() || body.length > 20000) throw httpError(400, 'Message must contain 1 to 20,000 characters.');
+    if (!emailService?.sendConsultationReply) throw httpError(503, 'Email sending is not available.');
+    emailService.assertConfigured?.();
+
+    const id = randomUUID();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [requests] = await connection.execute('SELECT id FROM consultation_requests WHERE id = ? FOR UPDATE', [consultationId]);
+      if (!requests[0]) throw httpError(404, 'Consultation request not found.');
+      await connection.execute(
+        `INSERT INTO consultation_messages
+         (id, consultation_id, actor_user_id, message_kind, channel, delivery_status, body_ciphertext, created_at)
+         VALUES (?, ?, ?, 'reply', 'email', 'sending', ?, UTC_TIMESTAMP())`,
+        [id, consultationId, actor?.userId || null, encryptText(body.trim(), `ConsultationMessage:${id}:body`)],
+      );
+      await writeAudit(connection, {
+        actor, action: 'consultation.reply.email_started', entityName: 'Consultation', entityId: consultationId,
+        changedFields: ['conversation_history', 'email_reply'],
+      });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    let deliveryStatus = 'accepted';
+    try {
+      await emailService.sendConsultationReply({ to, body: body.trim() });
+    } catch {
+      deliveryStatus = 'failed';
+    }
+
+    const update = await pool.getConnection();
+    try {
+      await update.beginTransaction();
+      await update.execute('UPDATE consultation_messages SET delivery_status = ? WHERE id = ?', [deliveryStatus, id]);
+      await writeAudit(update, {
+        actor, action: `consultation.reply.email_${deliveryStatus}`, entityName: 'Consultation', entityId: consultationId,
+        changedFields: ['conversation_history', 'email_delivery_status'],
+      });
+      await update.commit();
+    } catch (error) {
+      await update.rollback();
+      throw error;
+    } finally {
+      update.release();
+    }
+    if (deliveryStatus === 'failed') throw httpError(502, 'Email was not accepted by the mail service. Check the mail settings and delivery log before trying again.');
+
+    const [rows] = await pool.execute(
+      `SELECT m.*, u.display_name AS actor_name FROM consultation_messages m
+       LEFT JOIN users u ON u.id = m.actor_user_id WHERE m.id = ?`, [id],
+    );
+    return rows[0] ? toMessage(rows[0]) : null;
+  }
+
+  return { listMessages, addMessage, sendEmailReply };
 }

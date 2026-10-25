@@ -306,7 +306,7 @@ CREATE TABLE IF NOT EXISTS consultation_messages (
   actor_user_id CHAR(36) CHARACTER SET ascii NULL,
   message_kind ENUM('note', 'reply') NOT NULL,
   channel ENUM('internal', 'email', 'sms', 'whatsapp', 'social') NOT NULL,
-  delivery_status ENUM('internal', 'logged_manual') NOT NULL,
+  delivery_status ENUM('internal', 'logged_manual', 'sending', 'accepted', 'failed') NOT NULL,
   body_ciphertext MEDIUMBLOB NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

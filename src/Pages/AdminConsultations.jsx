@@ -26,6 +26,7 @@ function ConsultationThread({ consultation, canWrite }) {
   const [channel, setChannel] = useState('internal');
   const [body, setBody] = useState('');
   const [sentManually, setSentManually] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
   const threadKey = ['consultation-messages', consultation.id];
   const thread = useQuery({
     queryKey: threadKey,
@@ -33,11 +34,15 @@ function ConsultationThread({ consultation, canWrite }) {
     enabled: open && !IS_DEMO,
   });
   const saveMessage = useMutation({
-    mutationFn: () => requestJson(`/consultations/${encodeURIComponent(consultation.id)}/messages`, {
-      method: 'POST', body: JSON.stringify({ message_kind: kind, channel, body, sent_manually: sentManually }),
+    mutationFn: () => requestJson(kind === 'email_send'
+      ? `/consultations/${encodeURIComponent(consultation.id)}/email-replies`
+      : `/consultations/${encodeURIComponent(consultation.id)}/messages`, {
+      method: 'POST', body: JSON.stringify(kind === 'email_send'
+        ? { body }
+        : { message_kind: kind, channel, body, sent_manually: sentManually }),
     }),
     onSuccess: () => {
-      setBody(''); setSentManually(false);
+      setBody(''); setSentManually(false); setConfirmEmail(false);
       cache.invalidateQueries({ queryKey: threadKey });
     },
   });
@@ -46,6 +51,7 @@ function ConsultationThread({ consultation, canWrite }) {
     setKind(value);
     setChannel(value === 'note' ? 'internal' : 'email');
     setSentManually(false);
+    setConfirmEmail(false);
   }
 
   return <section className="mt-5 border-t pt-4">
@@ -62,10 +68,10 @@ function ConsultationThread({ consultation, canWrite }) {
         {thread.error && <p role="alert" className="text-sm text-red-800">{thread.error.message}</p>}
         {(thread.data || []).map((message) => <article key={message.id} className="rounded-lg border bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-900">{message.message_kind === 'note' ? 'Internal note' : `Reply logged · ${message.channel}`}</p>
+            <p className="text-sm font-semibold text-slate-900">{message.message_kind === 'note' ? 'Internal note' : message.delivery_status === 'accepted' ? 'Email accepted by mail server' : message.delivery_status === 'sending' ? 'Email sending…' : message.delivery_status === 'failed' ? 'Email not sent' : `Reply logged · ${message.channel}`}</p>
             <time className="text-xs text-slate-500">{dateLabel(message.created_at)}</time>
           </div>
-          <p className="mt-1 text-xs text-slate-600">By {message.actor_name}{message.delivery_status === 'logged_manual' ? ' · marked as sent outside this website' : ' · visible to authorized admins only'}</p>
+          <p className="mt-1 text-xs text-slate-600">By {message.actor_name}{message.delivery_status === 'logged_manual' ? ' · marked as sent outside this website' : message.delivery_status === 'accepted' ? ' · accepted for delivery; inbox arrival is not guaranteed' : message.delivery_status === 'failed' ? ' · check mail settings and delivery logs before retrying' : ' · visible to authorized admins only'}</p>
           <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800">{message.body}</p>
         </article>)}
         {!thread.isLoading && !thread.error && !(thread.data || []).length && <p className="text-sm text-slate-600">No staff notes or reply history yet.</p>}
@@ -73,7 +79,7 @@ function ConsultationThread({ consultation, canWrite }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">Entry type
               <select className="mt-1 block w-full rounded-md border bg-white p-2" value={kind} onChange={(event) => changeKind(event.target.value)}>
-                <option value="note">Internal note</option><option value="reply">Log a reply already sent</option>
+                <option value="note">Internal note</option><option value="reply">Log a reply already sent</option><option value="email_send">Send an email reply</option>
               </select>
             </label>
             {kind === 'reply' && <label className="text-sm font-medium">Sent through
@@ -82,11 +88,12 @@ function ConsultationThread({ consultation, canWrite }) {
               </select>
             </label>}
           </div>
-          <label className="block text-sm font-medium">{kind === 'note' ? 'Private note' : 'Copy of the reply'}</label>
-          <Textarea value={body} maxLength={20000} rows={4} onChange={(event) => setBody(event.target.value)} placeholder={kind === 'note' ? 'Add information for your team…' : 'Record what you sent to the client…'} required />
+          <label className="block text-sm font-medium">{kind === 'note' ? 'Private note' : kind === 'email_send' ? 'Email message' : 'Copy of the reply'}</label>
+          <Textarea value={body} maxLength={20000} rows={4} onChange={(event) => setBody(event.target.value)} placeholder={kind === 'note' ? 'Add information for your team…' : kind === 'email_send' ? 'Write your reply to the client…' : 'Record what you sent to the client…'} required />
           {kind === 'reply' && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={sentManually} onChange={(event) => setSentManually(event.target.checked)} className="mt-1" />I already sent this message outside the website. This form only records it; it will not send anything.</label>}
+          {kind === 'email_send' && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmEmail} onChange={(event) => setConfirmEmail(event.target.checked)} className="mt-1" />Send this email to {consultation.email} using the site email account.</label>}
           {saveMessage.error && <p role="alert" className="text-sm text-red-800">{saveMessage.error.message}</p>}
-          <Button type="submit" disabled={saveMessage.isPending || !body.trim() || (kind === 'reply' && !sentManually)}>{saveMessage.isPending ? 'Saving…' : kind === 'note' ? 'Save internal note' : 'Log sent reply'}</Button>
+          <Button type="submit" disabled={saveMessage.isPending || !body.trim() || (kind === 'reply' && !sentManually) || (kind === 'email_send' && !confirmEmail)}>{saveMessage.isPending ? 'Working…' : kind === 'note' ? 'Save internal note' : kind === 'email_send' ? 'Send email reply' : 'Log sent reply'}</Button>
         </form> : <p className="rounded-lg bg-slate-100 p-4 text-sm text-slate-700">You have view-only access to this request.</p>}
       </>}
     </div>}
@@ -114,7 +121,7 @@ export default function AdminConsultations() {
         <Link to={createPageUrl('AdminDashboard')}><Button variant="outline" size="icon" aria-label="Back to dashboard"><ArrowLeft size={20} /></Button></Link>
         <div><h1 className="text-2xl font-bold text-[var(--primary)] sm:text-3xl">Client Requests & Inbox</h1><p className="mt-1 text-sm text-gray-600 sm:text-base">Review requests, assign an owner and keep a private history.</p></div>
       </header>
-      <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><LockKeyhole size={18} className="mt-0.5 shrink-0" /><p>Messages are encrypted and saved in the database. This inbox does not send email, SMS, WhatsApp or social-media messages; use the contact links to reach the client, then log the sent reply here.</p></div>
+      <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><LockKeyhole size={18} className="mt-0.5 shrink-0" /><p>Messages are encrypted and saved in the database. Email replies can be sent from this inbox when the site mail settings are configured. SMS, WhatsApp and social-media replies are still sent externally and can be logged here.</p></div>
       {IS_DEMO && <p className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">Preview mode: personal client data and conversation history are not saved here. Connect QA before testing with real client information.</p>}
       {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-red-800">{error.message}</p>}
       {updateMutation.error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-red-800">{updateMutation.error.message}</p>}

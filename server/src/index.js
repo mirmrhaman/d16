@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { createUploadService } from './uploadService.js';
+import { createEmailService } from './emailService.js';
 import { validateSecurityConfig } from './security.js';
 
 export { createApp } from './app.js';
@@ -16,7 +17,7 @@ export async function startServer() {
     await writeAudit(pool, { actor, action: 'upload.create', entityName: 'media_assets', entityId: id, changedFields: ['image'] });
   } });
   const webRoot = fileURLToPath(new URL('../../dist/', import.meta.url));
-  const app = createApp({ pool, content, upload, webRoot });
+  const app = createApp({ pool, content, upload, emailService: createEmailService(), webRoot });
   const port = Number(process.env.PORT || 8787);
   const host = process.env.D16_BIND_HOST;
   const onListening = () => console.log(`[d16-api] listening on ${port} (database mode)`);

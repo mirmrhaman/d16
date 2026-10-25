@@ -28,7 +28,7 @@ const adminOnlyWrites = new Set(['DashboardLayout', 'WebsiteIcons', 'NavigationM
 const entitySections = { HeroSlide: 'HeroSlides', Stats: 'Stats', Service: 'Services', Project: 'Projects', BlogPost: 'Blog', GalleryVideo: 'Gallery', GalleryConcept: 'Gallery', PicYourConcept: 'PicYourConcept', AboutPage: 'About' };
 const unavailableCodes = new Set(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'ER_ACCESS_DENIED_ERROR', 'ER_NO_SUCH_TABLE']);
 
-export function createApp({ pool, content, auth = createAuthService({ pool }), upload, webRoot, allowedOrigins, secureCookies = process.env.NODE_ENV === 'production' || process.env.D16_SECURE_COOKIES === 'true' }) {
+export function createApp({ pool, content, auth = createAuthService({ pool }), upload, emailService, webRoot, allowedOrigins, secureCookies = process.env.NODE_ENV === 'production' || process.env.D16_SECURE_COOKIES === 'true' }) {
   const app = express();
   app.disable('x-powered-by');
   // cPanel Passenger proxies to the Node process locally. Trust only that local
@@ -80,7 +80,7 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
     if (section && req.user.role !== 'admin' && !req.user.permissions.includes(SECTION_PERMISSIONS[section])) return next(httpError(403, 'Your account does not have access to this content section.'));
     next();
   };
-  const inbox = createConsultationInboxService({ pool });
+  const inbox = createConsultationInboxService({ pool, emailService });
 
   // Single-instance QA limiter. Production needs a shared rate-limit store.
   const limits = new Map();
@@ -130,6 +130,12 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
   app.put('/api/access-control/:id', authenticate, permit('users.manage'), asyncRoute(async (req, res) => res.json(await auth.updateAccessControl(req.params.id, req.body, actorFor(req)))));
   app.get('/api/consultations/:id/messages', authenticate, permit('consultations.read'), asyncRoute(async (req, res) => res.json(await inbox.listMessages(req.params.id))));
   app.post('/api/consultations/:id/messages', authenticate, permit('consultations.write'), asyncRoute(async (req, res) => res.status(201).json(await inbox.addMessage(req.params.id, req.body, actorFor(req)))));
+  app.post('/api/consultations/:id/email-replies', authenticate, permit('consultations.write'), asyncRoute(async (req, res) => {
+    rateLimit(`consultation-email:${req.user.id}`, 20, 60 * 60 * 1000);
+    const consultation = (await content.listContent('Consultation')).find((item) => item.id === req.params.id);
+    if (!consultation) throw httpError(404, 'Consultation request not found.');
+    res.status(201).json(await inbox.sendEmailReply(req.params.id, { to: consultation.email, body: req.body.body }, actorFor(req)));
+  }));
 
   for (const [endpoint, entity, permission] of routes) {
     app.get(`/api/${endpoint}`, asyncRoute(async (req, res) => {

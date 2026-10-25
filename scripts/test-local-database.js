@@ -90,7 +90,9 @@ try {
   console.log('PASS: one-time admin bootstrap, encrypted email, hashed password');
 
   const origin = 'http://127.0.0.1:5173';
-  const app = createApp({ pool, content, auth, allowedOrigins: [origin], secureCookies: false });
+  const testEmails = [];
+  const emailService = { assertConfigured() {}, async sendConsultationReply(message) { testEmails.push(message); } };
+  const app = createApp({ pool, content, auth, emailService, allowedOrigins: [origin], secureCookies: false });
   server = await new Promise((resolve) => { const listener = app.listen(0, '127.0.0.1', () => resolve(listener)); });
   const base = `http://127.0.0.1:${server.address().port}/api`;
   let cookie = '';
@@ -404,6 +406,16 @@ try {
   assert.equal(enquiries.body[0].message, visitor.message);
   assert.equal(enquiries.body[0].preferred_date, visitor.preferred_date);
   assert.equal(enquiries.body[0].project_type, visitor.project_type);
+  assert.equal((await request(`/consultations/${submitted.body.id}/email-replies`, 'POST', { body: 'Synthetic QA email reply.' }, viewerCookie)).status, 403);
+  const sentReply = await request(`/consultations/${submitted.body.id}/email-replies`, 'POST', { body: 'Synthetic QA email reply.' });
+  assert.equal(sentReply.status, 201, JSON.stringify(sentReply.body));
+  assert.equal(sentReply.body.channel, 'email');
+  assert.equal(sentReply.body.delivery_status, 'accepted');
+  assert.equal(sentReply.body.actor_user_id, admin.id);
+  assert.deepEqual(testEmails, [{ to: visitor.email, body: 'Synthetic QA email reply.' }]);
+  const [[emailHistory]] = await database.query("SELECT body_ciphertext, delivery_status FROM consultation_messages WHERE consultation_id=?", [submitted.body.id]);
+  assert.equal(emailHistory.delivery_status, 'accepted');
+  assert(!emailHistory.body_ciphertext.toString().includes('Synthetic QA email reply.'));
   const [enquiryRows] = await database.query('SELECT * FROM consultation_requests');
   assert(!enquiryRows[0].email_ciphertext.toString().includes(visitor.email));
   assert.equal(enquiryRows[0].message, null);
@@ -416,6 +428,8 @@ try {
   assert(audit.some((row) => row.entity_id === service.body.id && row.actor_user_id === admin.id && row.created_at));
   assert(audit.some((row) => row.entity_id === submitted.body.id && row.actor_user_id === null && row.action === 'create'));
   assert(!JSON.stringify(audit).includes(visitor.message));
+  assert(audit.some((row) => row.entity_id === submitted.body.id && row.actor_user_id === admin.id && row.action === 'consultation.reply.email_accepted'));
+  assert(!JSON.stringify(audit).includes('Synthetic QA email reply.'));
   console.log('PASS: confidential consultation encryption/decryption, unforgeable actor and dated audit history');
 
   const failingRepository = content.createContentRepository({ database: pool, audit: async () => { throw new Error('test audit failure'); } });

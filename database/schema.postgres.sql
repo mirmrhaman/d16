@@ -355,7 +355,7 @@ CREATE TABLE consultation_messages (
   actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   message_kind TEXT NOT NULL CHECK (message_kind IN ('note', 'reply')),
   channel TEXT NOT NULL CHECK (channel IN ('internal', 'email', 'sms', 'whatsapp', 'social')),
-  delivery_status TEXT NOT NULL CHECK (delivery_status IN ('internal', 'logged_manual')),
+  delivery_status TEXT NOT NULL CHECK (delivery_status IN ('internal', 'logged_manual', 'sending', 'accepted', 'failed')),
   body_ciphertext BYTEA NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

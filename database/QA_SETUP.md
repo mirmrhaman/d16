@@ -28,6 +28,7 @@ Apply, in this order:
 4. `database/migrations/004_dashboard_icons.sql`
 5. `database/migrations/005_navigation.sql`
 6. `database/migrations/006_consultation_inbox.sql`
+7. `database/migrations/007_email_replies.sql`
 
 The migrations retain native tables and seed richer public CMS content without overwriting existing app-content rows. The second and third migrations do not restore revoked section permissions on a sequential rerun. The third migration adds the About page and its section permission; its sample team profiles need client approval or replacement in Admin About before release. Avoid concurrent migration runners.
 
@@ -35,7 +36,7 @@ Optional `seed.qa.synthetic.mysql.sql` is for a fresh disposable test database, 
 
 Migration 004 adds separate dashboard-layout and website-icon settings without overwriting saved values. Dashboard layout reads and writes require an administrator. Public pages can read website icons; only administrators can change them. Layout and icon updates require the loaded record version and are audited. Custom icons use the same persistent image upload configuration as other public photos.
 
-Migration 006 adds encrypted, append-only consultation notes and manually logged replies. Back up QA before applying it. The inbox does not deliver email/SMS/social messages; staff must send externally and explicitly mark a reply as already sent before recording it. Do not use the demo browser preview for real client details.
+Migration 006 adds encrypted consultation notes and manually logged replies. Migration 007 adds SMTP delivery status values while retaining existing history. Back up QA before applying migrations. The admin inbox can send plain-text email replies when SMTP settings are configured; SMS/WhatsApp/social replies are still sent externally and can be logged manually. Email messages are stored encrypted, and the activity log records the sender and delivery status without storing the message body. “Accepted” means the SMTP server accepted the recipient, not that the message reached the inbox. Do not use the demo browser preview for real client details.
 
 ## 3. Configure server-only secrets
 
@@ -48,6 +49,8 @@ The two encryption/lookup keys must be DIFFERENT cryptographically random 32-byt
 For HTTPS QA set `D16_SECURE_COOKIES=true`. Set `D16_ALLOWED_ORIGINS` to exact trusted origins without paths. Under cPanel Passenger leave `D16_BIND_HOST` unset so the app listens on the port assigned by Passenger. For a separately managed reverse proxy, bind to the provider's required local interface. Remote database connections require verified TLS; use DB_SSL_CA_FILE if your provider requires its CA. TLS certificate verification is never disabled.
 
 Persistent uploads need an absolute `D16_UPLOAD_DIR` outside your source/deployment folder and an HTTPS `D16_PUBLIC_UPLOAD_BASE_URL` pointing to its served public path. Only PNG/JPEG/WebP images up to 5 MB are supported. Use trusted hosted URLs for videos; video-file upload is not implemented.
+
+Email replies use server-only environment variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and optionally `SMTP_FROM` (defaults to `SMTP_USER`). For the current DianaHost mailbox use `SMTP_HOST=mail.d16interior.com`, `SMTP_PORT=465`, `SMTP_USER=admin@d16interior.com`, and `SMTP_FROM=admin@d16interior.com`. Set `SMTP_PASSWORD` to the mailbox password privately in the cPanel Node.js application environment, never in Git, source code, frontend variables, or chat. Port 465 is configured for implicit TLS with TLS 1.2 minimum; SMTP authentication is required. Do not configure until the matching application code and migration 007 are deployed. Use a test enquiry whose recipient is an address controlled by the site owner before client use.
 
 ## 4. Initialize real access and public catalogue
 

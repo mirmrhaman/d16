@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { requestJson, IS_DEMO } from '@/api/transport';
+import { canSendConsultationEmailReply } from '@/api/consultationEmailAccess';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ const dateLabel = (value) => {
   return date && !Number.isNaN(date.getTime()) ? format(date, 'MMM d, yyyy HH:mm') : 'Date unavailable';
 };
 
-function ConsultationThread({ consultation, canWrite }) {
+function ConsultationThread({ consultation, canWrite, canEmailReply }) {
   const cache = useQueryClient();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState('note');
@@ -79,7 +80,7 @@ function ConsultationThread({ consultation, canWrite }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">Entry type
               <select className="mt-1 block w-full rounded-md border bg-white p-2" value={kind} onChange={(event) => changeKind(event.target.value)}>
-                <option value="note">Internal note</option><option value="reply">Log a reply already sent</option><option value="email_send">Send an email reply</option>
+                <option value="note">Internal note</option><option value="reply">Log a reply already sent</option>{canEmailReply && <option value="email_send">Send an email reply</option>}
               </select>
             </label>
             {kind === 'reply' && <label className="text-sm font-medium">Sent through
@@ -91,9 +92,9 @@ function ConsultationThread({ consultation, canWrite }) {
           <label className="block text-sm font-medium">{kind === 'note' ? 'Private note' : kind === 'email_send' ? 'Email message' : 'Copy of the reply'}</label>
           <Textarea value={body} maxLength={20000} rows={4} onChange={(event) => setBody(event.target.value)} placeholder={kind === 'note' ? 'Add information for your team…' : kind === 'email_send' ? 'Write your reply to the client…' : 'Record what you sent to the client…'} required />
           {kind === 'reply' && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={sentManually} onChange={(event) => setSentManually(event.target.checked)} className="mt-1" />I already sent this message outside the website. This form only records it; it will not send anything.</label>}
-          {kind === 'email_send' && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmEmail} onChange={(event) => setConfirmEmail(event.target.checked)} className="mt-1" />Send this email to {consultation.email} using the site email account.</label>}
+          {kind === 'email_send' && canEmailReply && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmEmail} onChange={(event) => setConfirmEmail(event.target.checked)} className="mt-1" />Send this email to {consultation.email} using the site email account.</label>}
           {saveMessage.error && <p role="alert" className="text-sm text-red-800">{saveMessage.error.message}</p>}
-          <Button type="submit" disabled={saveMessage.isPending || !body.trim() || (kind === 'reply' && !sentManually) || (kind === 'email_send' && !confirmEmail)}>{saveMessage.isPending ? 'Working…' : kind === 'note' ? 'Save internal note' : kind === 'email_send' ? 'Send email reply' : 'Log sent reply'}</Button>
+          <Button type="submit" disabled={saveMessage.isPending || !body.trim() || (kind === 'reply' && !sentManually) || (kind === 'email_send' && (!canEmailReply || !confirmEmail))}>{saveMessage.isPending ? 'Working…' : kind === 'note' ? 'Save internal note' : kind === 'email_send' ? 'Send email reply' : 'Log sent reply'}</Button>
         </form> : <p className="rounded-lg bg-slate-100 p-4 text-sm text-slate-700">You have view-only access to this request.</p>}
       </>}
     </div>}
@@ -108,6 +109,7 @@ export default function AdminConsultations() {
   });
   const canWrite = user?.permissions?.includes('consultations.write') || user?.role === 'admin';
   const canAssign = user?.permissions?.includes('users.manage') || user?.role === 'admin';
+  const canEmailReply = (consultation) => canWrite && canSendConsultationEmailReply(consultation, user);
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => base44.entities.User.list(), enabled: !IS_DEMO && canAssign });
   const updateMutation = useMutation({
     mutationFn: ({ id, updates }) => base44.entities.Consultation.update(id, updates),
@@ -131,7 +133,7 @@ export default function AdminConsultations() {
             <div className="min-w-0 flex-1 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="mb-2 text-xl font-bold text-[var(--primary)]">{consultation.full_name}</h2><Badge className={statusColors[consultation.status] || 'bg-slate-100 text-slate-700'}>{String(consultation.status).replace(/_/g, ' ')}</Badge></div><time className="text-sm text-gray-500">{dateLabel(consultation.created_date || consultation.created_at)}</time></div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="flex items-center gap-2 break-all text-sm text-gray-600"><Mail size={16} className="shrink-0 text-[var(--accent)]" /><a href={`mailto:${consultation.email}`} className="hover:text-[var(--primary)]">{consultation.email}</a></div>
+                {consultation.email && <div className="flex items-center gap-2 break-all text-sm text-gray-600"><Mail size={16} className="shrink-0 text-[var(--accent)]" /><a href={`mailto:${consultation.email}`} className="hover:text-[var(--primary)]">{consultation.email}</a></div>}
                 <div className="flex items-center gap-2 text-sm text-gray-600"><Phone size={16} className="shrink-0 text-[var(--accent)]" /><a href={`tel:${consultation.phone}`} className="hover:text-[var(--primary)]">{consultation.phone}</a></div>
                 {consultation.location && <div className="flex items-center gap-2 text-sm text-gray-600"><MapPin size={16} className="text-[var(--accent)]" />{consultation.location}</div>}
                 {consultation.preferred_date && <div className="flex items-center gap-2 text-sm text-gray-600"><Calendar size={16} className="text-[var(--accent)]" />{dateLabel(consultation.preferred_date).split(' ').slice(0, 3).join(' ')}</div>}
@@ -140,10 +142,10 @@ export default function AdminConsultations() {
             </div>
             <aside className="space-y-4 lg:w-64 lg:shrink-0">
               <div><Label className="mb-2 block text-sm font-semibold text-gray-700">Status</Label><Select disabled={!canWrite} value={consultation.status} onValueChange={(status) => updateMutation.mutate({ id: consultation.id, updates: { status } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="contacted">Contacted</SelectItem><SelectItem value="in_progress">In progress</SelectItem><SelectItem value="completed">Completed</SelectItem></SelectContent></Select></div>
-              {!IS_DEMO && canAssign && <div><Label className="mb-2 block text-sm font-semibold text-gray-700">Assigned to</Label><select disabled={!canWrite} className="block w-full rounded-md border bg-white p-2 text-sm disabled:opacity-60" value={consultation.assigned_to_user_id || 'unassigned'} onChange={(event) => updateMutation.mutate({ id: consultation.id, updates: { assigned_to_user_id: event.target.value === 'unassigned' ? null : event.target.value } })}><option value="unassigned">Unassigned</option>{users.filter((teamUser) => teamUser.is_active && teamUser.verified && teamUser.permissions?.includes('consultations.read') && teamUser.permissions?.includes('consultations.write')).map((teamUser) => <option key={teamUser.id} value={teamUser.id}>{teamUser.name || teamUser.email}</option>)}</select></div>}
+              {!IS_DEMO && canAssign && <div><Label className="mb-2 block text-sm font-semibold text-gray-700">Assigned to</Label><select disabled={!canWrite} className="block w-full rounded-md border bg-white p-2 text-sm disabled:opacity-60" value={consultation.assigned_to_user_id || 'unassigned'} onChange={(event) => updateMutation.mutate({ id: consultation.id, updates: { assigned_to_user_id: event.target.value === 'unassigned' ? null : event.target.value } })}><option value="unassigned">Unassigned</option>{users.filter((teamUser) => teamUser.is_active && teamUser.verified && teamUser.permissions?.includes('consultations.read') && teamUser.permissions?.includes('consultations.write')).map((teamUser) => <option key={teamUser.id} value={teamUser.id}>{teamUser.name ? `${teamUser.name} (${teamUser.email})` : teamUser.email}</option>)}</select></div>}
             </aside>
           </div>
-          <ConsultationThread consultation={consultation} canWrite={canWrite} />
+          <ConsultationThread consultation={consultation} canWrite={canWrite} canEmailReply={canEmailReply(consultation)} />
         </CardContent></Card>)}
       </div>}
     </div>

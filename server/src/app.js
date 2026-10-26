@@ -134,6 +134,10 @@ export function createApp({ pool, content, auth = createAuthService({ pool }), u
     rateLimit(`consultation-email:${req.user.id}`, 20, 60 * 60 * 1000);
     const consultation = (await content.listContent('Consultation')).find((item) => item.id === req.params.id);
     if (!consultation) throw httpError(404, 'Consultation request not found.');
+    const validEmail = (value) => typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+    if (!validEmail(req.user.email) || consultation.assigned_to_user_id !== req.user.id || !validEmail(consultation.email)) {
+      throw httpError(403, 'Email replies are available only to the assigned team member with a valid email address and a valid client email.');
+    }
     res.status(201).json(await inbox.sendEmailReply(req.params.id, { to: consultation.email, body: req.body.body }, actorFor(req)));
   }));
 

@@ -8,7 +8,7 @@ process.env.APP_HMAC_KEY_BASE64 = randomBytes(32).toString('base64');
 
 async function fixture(t, options = {}) {
   const calls = [];
-  const user = { id: 'verified-user-id', role: 'admin', permissions: ['content.read', 'content.write', 'users.manage', 'branding.write'] };
+  const user = { id: 'verified-user-id', email: 'assigned@example.test', role: 'admin', permissions: ['content.read', 'content.write', 'consultations.write', 'users.manage', 'branding.write'] };
   const auth = {
     getSession: async (token) => token === 'valid-cookie' ? (options.user || user) : null,
     login: async () => ({ user, token: 'valid-cookie', expiresAt: new Date(Date.now() + 3600000) }),
@@ -119,6 +119,28 @@ test('public consultation strips staff fields and returns no confidential values
   assert.equal('assigned_to_user_id' in calls[0].payload, false);
   assert.equal(calls[0].actor.userId, null);
   assert.equal((await request('/api/consultations')).status, 401);
+});
+
+test('email-reply API exists and requires the sender to be the assigned team member with email', async (t) => {
+  const id = '2b62cb9f-453b-4975-8df3-25d6d7ed89ac';
+  const path = `/api/consultations/${id}/email-replies`;
+  const body = { body: 'A QA email test.' };
+  const cases = [
+    { rows: [{ id, email: 'client@example.test', assigned_to_user_id: null }], expected: 403 },
+    { rows: [{ id, email: 'client@example.test', assigned_to_user_id: 'another-user' }], expected: 403 },
+    { rows: [{ id, email: 'client@example.test', assigned_to_user_id: 'verified-user-id' }], user: { id: 'verified-user-id', email: '', role: 'admin', permissions: ['consultations.write'] }, expected: 403 },
+    // A configured sender assigned to the request passes authorization; this
+    // fixture intentionally lacks SMTP so the handler's 503 proves the route
+    // matched instead of falling through to "API endpoint not found".
+    { rows: [{ id, email: 'client@example.test', assigned_to_user_id: 'verified-user-id' }], expected: 503 },
+  ];
+  for (const item of cases) {
+    const fixtureResult = await fixture(t, item);
+    const response = await fixtureResult.write(path, body);
+    assert.equal(response.status, item.expected);
+    if (item.expected === 403) assert.match((await response.json()).error, /assigned team member/);
+    if (item.expected === 503) assert.equal((await response.json()).error, 'Email sending is not available.');
+  }
 });
 
 test('public blog hides drafts and future posts; admin read authenticates', async (t) => {

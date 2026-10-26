@@ -14,6 +14,15 @@ test('desktop logo, direct tabs, chosen dropdown and account actions share one n
   assert.match(desktop, /aria-label="Account actions" className="hidden shrink-0 items-center gap-2 lg:flex"/);
 });
 
+test('broken configured logos fall back to a bundled D16 wordmark on every deployment base path', async () => {
+  assert.match(layout, /import\.meta\.env\.BASE_URL\}images\/d16-wordmark\.svg/);
+  assert.equal((layout.match(/onError=\{handleLogoError\}/g) || []).length, 2);
+  assert.match(layout, /image\.dataset\.fallbackApplied === 'true'/);
+  const wordmark = await readFile(new URL('../public/images/d16-wordmark.svg', import.meta.url), 'utf8');
+  assert.match(wordmark, /D16 Interior/);
+  assert.match(wordmark, /INTERIOR/);
+});
+
 test('overflow navigation is reachable with scroll controls, focus and keyboard without automatic grouping', () => {
   assert.match(layout, /aria-label="Previous navigation tabs"/);
   assert.match(layout, /aria-label="Next navigation tabs"/);

@@ -17,8 +17,15 @@ import { isPublicTypographyPath } from '@/data/typography';
 import { normalizeSocialMedia } from '../server/src/socialMediaSchema.js';
 
 const DEFAULT_THEME_COLOR = "#112037";
-const DEFAULT_LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/690395669c778d5c32d51682/5ac5acb53_image.png";
+const DEFAULT_LOGO_URL = `${import.meta.env.BASE_URL}images/d16-wordmark.svg`;
 const NAVIGATION_ICONS = { Home, Users, Briefcase, FolderOpen, Images, BookOpen, Mail };
+
+const handleLogoError = (event) => {
+  const image = event.currentTarget;
+  if (image.dataset.fallbackApplied === 'true') return;
+  image.dataset.fallbackApplied = 'true';
+  image.src = DEFAULT_LOGO_URL;
+};
 
 const normalizeHex = (value) => {
   if (!value || typeof value !== "string") return "";
@@ -305,6 +312,7 @@ export default function Layout({ children }) {
               <img 
                 src={logoSrc}
                 alt="D16 Interior"
+                onError={handleLogoError}
                 className="h-16 w-auto max-w-[10rem] object-contain"
                 style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
               />
@@ -465,6 +473,7 @@ export default function Layout({ children }) {
               <img 
                 src={logoSrc}
                 alt="D16 Interior"
+                onError={handleLogoError}
                 className="h-16 w-auto mb-6"
                 style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}
               />
